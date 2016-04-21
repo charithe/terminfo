@@ -1,4 +1,4 @@
-package terminfo
+package caps
 
 // Boolean capabilities
 const (
@@ -46,7 +46,7 @@ const (
 	LinefeedIsNewline
 	HasHardwareTabs
 	ReturnDoesClrEol
-	boolCount
+	BoolCount
 )
 
 // Numeric capabilities
@@ -90,7 +90,7 @@ const (
 	BackspaceDelay
 	HorizontalTabDelay
 	NumberOfFunctionKeys
-	numericCount
+	NumericCount
 )
 
 // String capabilities
@@ -509,5 +509,5 @@ const (
 	MemoryLock
 	MemoryUnlock
 	BoxChars1
-	stringCount
+	StringCount
 )
