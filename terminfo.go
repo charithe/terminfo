@@ -2,97 +2,97 @@ package terminfo
 
 import (
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"io"
 	"os"
+	"strconv"
 	"strings"
+
+	"github.com/nhooyr/terminfo/caps"
 )
 
 type Terminfo struct {
-	BoolCaps    [boolCount]bool
-	NumericCaps [numericCount]int16
-	StringCaps  [stringCount]string
+	Names       []string
+	BoolCaps    [caps.BoolCount]bool
+	NumericCaps [caps.NumericCount]int16
+	StringCaps  [caps.StringCount]string
 }
 
-// GetTermInfo follows the behavior described in terminfo(5) as distributed by ncurses
-// to find the correct terminfo file.
-func GetTermInfo() (ti *Terminfo, err error) {
+// GetTerminfo follows the behavior described in terminfo(5) to find correct the terminfo file.
+func GetTerminfo() (ti *Terminfo, err error) {
 	if terminfo := os.Getenv("TERMINFO"); terminfo != "" {
-		return getTermInfo(terminfo)
+		return getTerminfo(terminfo)
 	}
-
 	if home := os.Getenv("HOME"); home != "" {
-		ti, err = getTermInfo(home + "/.terminfo")
+		ti, err = getTerminfo(home + "/.terminfo")
 		if err == nil {
 			return
 		}
 	}
-
 	if dirs := os.Getenv("TERMINFO_DIRS"); dirs != "" {
 		for _, dir := range strings.Split(dirs, ":") {
 			if dir == "" {
 				dir = "/usr/share/terminfo"
 			}
-			ti, err = getTermInfo(dir)
+			ti, err = getTerminfo(dir)
 			if err == nil {
 				return
 			}
 		}
 	}
-
-	return getTermInfo("/usr/share/terminfo")
+	return getTerminfo("/usr/share/terminfo")
 }
 
-func getTermInfo(name string) (ti *Terminfo, err error) {
-	f, err := readTermInfo(name)
+func getTerminfo(dir string) (ti *Terminfo, err error) {
+	f, err := openTerminfo(dir)
 	if err != nil {
 		return
 	}
-	return parseTerminfo(f)
+	return readTerminfo(f)
 }
 
-func readTermInfo(dir string) (f *os.File, err error) {
-	term := os.Getenv("TERM")
-	if term == "" {
+func openTerminfo(dir string) (f *os.File, err error) {
+	name := os.Getenv("TERM")
+	if name == "" {
 		return nil, errors.New("terminfo: no TERM envirnoment variable set")
 	}
-
-	// first try, the typical *nix path
-	terminfo := dir + "/" + term[0:1] + "/" + term
-	f, err = os.Open(terminfo)
+	// Try typical *nix path.
+	f, err = os.Open(dir + "/" + name[0:1] + "/" + name)
 	if err == nil {
 		return
 	}
-
-	// fallback to darwin specific dirs structure
-	terminfo = dir + "/" + hex.EncodeToString([]byte(term[:1])) + "/" + term
-	f, err = os.Open(terminfo)
-	return
+	// Fallback to darwin specific path.
+	return os.Open(dir + "/" + strconv.FormatUint(uint64(name[0]), 16) + "/" + name)
 }
 
-func parseTerminfo(r io.ReadSeeker) (ti *Terminfo, err error) {
-	// read in the header
+// TODO The value -1 is represented by the two bytes 0377, 0377; other negative values are illegal.
+func readTerminfo(r io.ReadSeeker) (ti *Terminfo, err error) {
+	// Read the header.
 	var h header
 	if err = binary.Read(r, binary.LittleEndian, &h); err != nil {
 		return nil, err
 	}
 
+	if h.checkMagic() {
+		return nil, errors.New("terminfo: wrong filetype for terminfo file")
+	}
+
+	// Read name section.
+	names := make([]byte, h.lenNames())
+	if _, err = io.ReadFull(r, names); err != nil {
+		return nil, err
+	}
 	ti = new(Terminfo)
+	ti.Names = strings.Split(string(names), "|")
 
-	// read name section
-	names := make([]byte, h[lenNames])
-	if _, err = r.Read(names); err != nil {
+	// Read the boolean section.
+	bools := make([]byte, h.lenBools())
+	if _, err = io.ReadFull(r, bools); err != nil {
 		return nil, err
 	}
-
-	// read the boolean section
-	bools := make([]byte, h[lenBool])
-	if _, err = r.Read(bools); err != nil {
-		return nil, err
-	}
-	if (h[lenNames]+h[lenBool])%2 == 1 {
-		// old quirk to align everything on word boundaries
+	if h.needAlignment() {
+		// An extra null byte was inserted to align everything on word boundaries.
+		// Lets skip it.
 		r.Seek(1, 1)
 	}
 	for i, b := range bools {
@@ -101,29 +101,30 @@ func parseTerminfo(r io.ReadSeeker) (ti *Terminfo, err error) {
 		}
 	}
 
-	// read the numeric section
-	numbers := make([]int16, h[lenNumeric])
+	// Read the numeric section.
+	numbers := make([]int16, h.lenNumeric())
 	if err = binary.Read(r, binary.LittleEndian, numbers); err != nil {
 		return nil, err
 	}
 	for i, n := range numbers {
-		if n != 0xff && n > -1 {
+		if n > -1 {
 			ti.NumericCaps[i] = n
 		}
 	}
 
-	// read the string section
-	strings := make([]int16, h[lenStrings])
+	// Read the string section.
+	strings := make([]int16, h.lenStrings())
 	if err = binary.Read(r, binary.LittleEndian, strings); err != nil {
 		return nil, err
 	}
 
-	// read the table section
-	table := make([]byte, h[lenTable])
-	if _, err = r.Read(table); err != nil {
+	// Read the string table section.
+	table := make([]byte, h.lenTable())
+	if _, err = io.ReadFull(r, table); err != nil {
 		return nil, err
 	}
 
+	// Read the strings referenced in the string section from the string table.
 	for i, off := range strings {
 		if off > -1 {
 			j := off

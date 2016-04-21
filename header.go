@@ -2,11 +2,41 @@ package terminfo
 
 type header [6]int16
 
-// Named indexes of header
-const (
-	lenNames   = iota + 1 // length of names section in bytes
-	lenBool               // length of boolean section in bytes
-	lenNumeric            // length of numeric section in int16
-	lenStrings            // length of offset section in int166
-	lenTable              // length of string table in bytes
-)
+// checkMagic returns true if the correct magic number is set on the header
+// and false otherwise.
+func (h header) checkMagic() bool {
+	if h[0] == 0x11A {
+		return true
+	}
+	return false
+}
+
+// lenNames returns the length of name section in bytes
+func (h header) lenNames() int16 {
+	return h[1]
+}
+
+// lenBools returns the length of boolean section in bytes
+func (h header) lenBools() int16 {
+	return h[2]
+}
+
+// lenNumeric returns the length of numeric section in int16
+func (h header) lenNumeric() int16 {
+	return h[3]
+}
+
+// lenStrings returns the length of string section in int16
+func (h header) lenStrings() int16 {
+	return h[4]
+}
+
+// lenTable returns the length of string table in bytes.
+func (h header) lenTable() int16 {
+	return h[5]
+}
+
+// needAlignment checks if a null byte is needed to align everything on word boundaries.
+func (h header) needAlignment() bool {
+	return (h.lenNames()+h.lenBools())%2 == 1
+}
