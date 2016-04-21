@@ -39,6 +39,7 @@ const (
 	SemiAutoRightMargin
 	CpiChangesRes
 	LpiChangesRes
+	// Rest of these are internal caps
 	BackspacesWithBs
 	CrtNoScrolling
 	NoCorrectlyWorkingCr
@@ -84,6 +85,7 @@ const (
 	Buttons
 	BitImageEntwining
 	BitImageType
+	// Rest of these are internal caps
 	MagicCookieGlitchUl
 	CarriageReturnDelay
 	NewLineDelay
@@ -489,6 +491,7 @@ const (
 	EnterVerticalHlMode
 	SetAAttributes
 	SetPglenInch
+	// Rest of these are internal caps
 	TermcapInit2
 	TermcapReset
 	LinefeedIfNotLf
