@@ -2,13 +2,12 @@ package terminfo
 
 type header [6]int16
 
-// checkMagic returns true if the correct magic number is set on the header
-// and false otherwise.
-func (h header) checkMagic() bool {
+// badMagic returns false if the correct magic number is set on the header and true otherwise.
+func (h header) badMagic() bool {
 	if h[0] == 0x11A {
-		return true
+		return false
 	}
-	return false
+	return true
 }
 
 // lenNames returns the length of name section in bytes

@@ -18,13 +18,14 @@ type Terminfo struct {
 	StringCaps  [caps.StringCount]string
 }
 
-// GetTerminfo follows the behavior described in terminfo(5) to find correct the terminfo file.
-func GetTerminfo() (ti *Terminfo, err error) {
+// Open follows the behavior described in terminfo(5) to find correct the
+// terminfo file and then return a Terminfo struct that describes the file.
+func Open() (ti *Terminfo, err error) {
 	if terminfo := os.Getenv("TERMINFO"); terminfo != "" {
-		return getTerminfo(terminfo)
+		return openDir(terminfo)
 	}
 	if home := os.Getenv("HOME"); home != "" {
-		ti, err = getTerminfo(home + "/.terminfo")
+		ti, err = openDir(home + "/.terminfo")
 		if err == nil {
 			return
 		}
@@ -34,35 +35,28 @@ func GetTerminfo() (ti *Terminfo, err error) {
 			if dir == "" {
 				dir = "/usr/share/terminfo"
 			}
-			ti, err = getTerminfo(dir)
+			ti, err = openDir(dir)
 			if err == nil {
 				return
 			}
 		}
 	}
-	return getTerminfo("/usr/share/terminfo")
+	return openDir("/usr/share/terminfo")
 }
 
-func getTerminfo(dir string) (ti *Terminfo, err error) {
-	f, err := openTerminfo(dir)
-	if err != nil {
-		return
-	}
-	return readTerminfo(f)
-}
-
-func openTerminfo(dir string) (f *os.File, err error) {
+func openDir(dir string) (ti *Terminfo, err error) {
 	name := os.Getenv("TERM")
 	if name == "" {
 		return nil, errors.New("terminfo: no TERM envirnoment variable set")
 	}
 	// Try typical *nix path.
-	f, err = os.Open(dir + "/" + name[0:1] + "/" + name)
+	f, err := os.Open(dir + "/" + name[0:1] + "/" + name)
 	if err == nil {
-		return
+		return readTerminfo(f)
 	}
 	// Fallback to darwin specific path.
-	return os.Open(dir + "/" + strconv.FormatUint(uint64(name[0]), 16) + "/" + name)
+	f, err = os.Open(dir + "/" + strconv.FormatUint(uint64(name[0]), 16) + "/" + name)
+	return readTerminfo(f)
 }
 
 // TODO The value -1 is represented by the two bytes 0377, 0377; other negative values are illegal.
@@ -73,7 +67,7 @@ func readTerminfo(r io.ReadSeeker) (ti *Terminfo, err error) {
 		return nil, err
 	}
 
-	if h.checkMagic() {
+	if h.badMagic() {
 		return nil, errors.New("terminfo: wrong filetype for terminfo file")
 	}
 

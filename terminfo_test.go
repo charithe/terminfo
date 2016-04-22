@@ -7,8 +7,8 @@ import (
 	"github.com/nhooyr/terminfo/caps"
 )
 
-func TestLoadTerminfo(t *testing.T) {
-	ti, err := terminfo.GetTerminfo()
+func TestOpen(t *testing.T) {
+	ti, err := terminfo.Open()
 	if err != nil {
 		t.Fatal(err)
 	}
