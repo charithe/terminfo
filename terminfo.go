@@ -10,18 +10,20 @@ import (
 	"github.com/nhooyr/terminfo/caps"
 )
 
+// Package errors
+var (
+	ErrSmallFile = errors.New("terminfo: file too small")
+	ErrBadMagic  = errors.New("terminfo: wrong filetype for terminfo file")
+	ErrEmptyTerm = errors.New("terminfo: empty term name")
+)
+
+// Terminfo describes a terminal's capabilities.
 type Terminfo struct {
 	Names       []string
 	BoolCaps    [caps.BoolCount]bool
 	NumericCaps [caps.NumericCount]int16
 	StringCaps  [caps.StringCount]string
 }
-
-var (
-	errSmallFile = errors.New("terminfo: file too small")
-	errBadMagic  = errors.New("terminfo: wrong filetype for terminfo file")
-	errEmptyTerm = errors.New("terminfo: empty term name")
-)
 
 // OpenEnv calls Open with the name as $TERM.
 func OpenEnv() (ti *Terminfo, err error) {
@@ -32,12 +34,10 @@ func OpenEnv() (ti *Terminfo, err error) {
 // terminfo file and then return a Terminfo struct that describes the file.
 func Open(name string) (ti *Terminfo, err error) {
 	if name == "" {
-		return nil, errEmptyTerm
-	}
-	if terminfo := os.Getenv("TERMINFO"); terminfo != "" {
+		return nil, ErrEmptyTerm
+	} else if terminfo := os.Getenv("TERMINFO"); terminfo != "" {
 		return openDir(terminfo, name)
-	}
-	if home := os.Getenv("HOME"); home != "" {
+	} else if home := os.Getenv("HOME"); home != "" {
 		ti, err = openDir(home+"/.terminfo", name)
 		if err == nil {
 			return
@@ -74,7 +74,7 @@ func openDir(dir, name string) (ti *Terminfo, err error) {
 // TODO The value -1 is represented by the two bytes 0377, 0377; other negative values are illegal.
 func readTerminfo(buf []byte) (*Terminfo, error) {
 	if len(buf) < 6 {
-		return nil, errSmallFile
+		return nil, ErrSmallFile
 	}
 	// Read the header.
 	var h header
@@ -82,9 +82,9 @@ func readTerminfo(buf []byte) (*Terminfo, error) {
 		h[i] = littleEndian(i*2, buf)
 	}
 	if int(h.lenFile()) > len(buf) {
-		return nil, errSmallFile
+		return nil, ErrSmallFile
 	} else if h.badMagic() {
-		return nil, errBadMagic
+		return nil, ErrBadMagic
 	}
 
 	// Read name section.
@@ -99,7 +99,7 @@ func readTerminfo(buf []byte) (*Terminfo, error) {
 			ti.BoolCaps[i] = true
 		}
 	}
-	if h.extraNull() {
+	if h.isExtraNull() {
 		// Skip extra null byte inserted to align everything on word boundaries.
 		i++
 	}
@@ -127,8 +127,4 @@ func readTerminfo(buf []byte) (*Terminfo, error) {
 	}
 
 	return ti, nil
-}
-
-func littleEndian(i int, buf []byte) int16 {
-	return int16(buf[i+1])<<8 | int16(buf[i])
 }

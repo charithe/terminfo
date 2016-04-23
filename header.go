@@ -41,7 +41,7 @@ func (h header) lenFile() int16 {
 
 // extraNull returns true if an extra null byte is needed to align everything
 // on word boundaries and false otherwise.
-func (h header) extraNull() bool {
+func (h header) isExtraNull() bool {
 	return (h.lenNames()+h.lenBools())%2 == 1
 }
 
