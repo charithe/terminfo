@@ -1,11 +1,13 @@
 package terminfo
 
 import (
+	"bytes"
 	"errors"
 	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/nhooyr/terminfo/caps"
 )
@@ -30,7 +32,7 @@ func OpenEnv() (ti *Terminfo, err error) {
 	return Open(os.Getenv("TERM"))
 }
 
-// Open follows the behavior described in terminfo(5) to find correct the terminfo file 
+// Open follows the behavior described in terminfo(5) to find correct the terminfo file
 // using the name and then return a Terminfo struct that describes the file.
 func Open(name string) (ti *Terminfo, err error) {
 	if name == "" {
@@ -74,6 +76,7 @@ func openDir(dir, name string) (ti *Terminfo, err error) {
 
 // readTerminfo reads the Terminfo file in buf into a Terminfo struct and returns it.
 // TODO extended reader
+// TODO break this function up
 func readTerminfo(buf []byte) (*Terminfo, error) {
 	if len(buf) < 6 {
 		return nil, ErrSmallFile
@@ -94,7 +97,8 @@ func readTerminfo(buf []byte) (*Terminfo, error) {
 	// Read name section.
 	pi := h.len()
 	i := pi + h.lenNames()
-	ti := &Terminfo{Names: strings.Split(string(buf[pi:i]), "|")}
+	ti := new(Terminfo)
+	ti.Names = strings.Split(string(buf[pi:i]), "|")
 
 	// Read the boolean section.
 	pi, i = i, i+h.lenBools()
@@ -111,7 +115,7 @@ func readTerminfo(buf []byte) (*Terminfo, error) {
 	// Read the numeric section.
 	pi, i = i, i+h.lenNumeric()
 	nbuf := buf[pi:i]
-	for j := 0; j < len(nbuf)-1; j += 2 {
+	for j := 0; j < len(nbuf); j += 2 {
 		if n := littleEndian(j, nbuf); n > -1 {
 			ti.NumericCaps[j/2] = n
 		}
@@ -121,7 +125,7 @@ func readTerminfo(buf []byte) (*Terminfo, error) {
 	pi, i = i, i+h.lenStrings()
 	sbuf := buf[pi:i]
 	table := buf[i : i+h.lenTable()]
-	for j := 0; j < len(sbuf)-1; j += 2 {
+	for j := 0; j < len(sbuf); j += 2 {
 		if off := littleEndian(j, sbuf); off > -1 {
 			x := off
 			for ; table[x] != 0; x++ {
@@ -131,4 +135,25 @@ func readTerminfo(buf []byte) (*Terminfo, error) {
 	}
 
 	return ti, nil
+}
+
+var parametizerPool = sync.Pool{
+	New: func() interface{} {
+		pz := new(parametizer)
+		pz.buf = bytes.NewBuffer(make([]byte, 0, 30))
+		return pz
+	},
+}
+
+// TParm evaluates a terminfo parameterized string, such as caps.SetAForeground,
+// and returns the result.
+func (ti *Terminfo) TParm(s string, p ...int) string {
+	pz := getParametizer(s)
+	defer pz.free()
+	// make sure we always have 9 parameters -- makes it easier
+	// later to skip checks
+	for i := 0; i < len(pz.params) && i < len(p); i++ {
+		pz.params[i] = p[i]
+	}
+	return pz.run()
 }
