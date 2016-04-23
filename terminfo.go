@@ -10,7 +10,7 @@ import (
 	"github.com/nhooyr/terminfo/caps"
 )
 
-// Package errors
+// Package errors.
 var (
 	ErrSmallFile = errors.New("terminfo: file too small")
 	ErrBadMagic  = errors.New("terminfo: wrong filetype for terminfo file")
@@ -30,8 +30,8 @@ func OpenEnv() (ti *Terminfo, err error) {
 	return Open(os.Getenv("TERM"))
 }
 
-// Open follows the behavior described in terminfo(5) to find correct the
-// terminfo file and then return a Terminfo struct that describes the file.
+// Open follows the behavior described in terminfo(5) to find correct the terminfo file 
+// using the name and then return a Terminfo struct that describes the file.
 func Open(name string) (ti *Terminfo, err error) {
 	if name == "" {
 		return nil, ErrEmptyTerm
@@ -57,13 +57,14 @@ func Open(name string) (ti *Terminfo, err error) {
 	return openDir("/usr/share/terminfo", name)
 }
 
+// openDir reads the Terminfo file specified by the dir and name.
 func openDir(dir, name string) (ti *Terminfo, err error) {
 	// Try typical *nix path.
 	b, err := ioutil.ReadFile(dir + "/" + name[0:1] + "/" + name)
 	if err == nil {
 		return readTerminfo(b)
 	}
-	// Fallback to darwin specific path.
+	// Fallback to the darwin specific path.
 	b, err = ioutil.ReadFile(dir + "/" + strconv.FormatUint(uint64(name[0]), 16) + "/" + name)
 	if err != nil {
 		return
@@ -71,7 +72,8 @@ func openDir(dir, name string) (ti *Terminfo, err error) {
 	return readTerminfo(b)
 }
 
-// TODO The value -1 is represented by the two bytes 0377, 0377; other negative values are illegal.
+// readTerminfo reads the Terminfo file in buf into a Terminfo struct and returns it.
+// TODO extended reader
 func readTerminfo(buf []byte) (*Terminfo, error) {
 	if len(buf) < 6 {
 		return nil, ErrSmallFile
@@ -79,6 +81,8 @@ func readTerminfo(buf []byte) (*Terminfo, error) {
 	// Read the header.
 	var h header
 	for i := 0; i < len(h); i++ {
+		// TODO The value -1 is represented by the two bytes 0377, 0377; other negative values are illegal.
+		// I think this applies to all short integers. But I will wait for a email reply on the ncurses mailing list for advice on how to handle this.
 		h[i] = littleEndian(i*2, buf)
 	}
 	if int(h.lenFile()) > len(buf) {
@@ -99,7 +103,7 @@ func readTerminfo(buf []byte) (*Terminfo, error) {
 			ti.BoolCaps[i] = true
 		}
 	}
-	if h.isExtraNull() {
+	if h.skipNull() {
 		// Skip extra null byte inserted to align everything on word boundaries.
 		i++
 	}

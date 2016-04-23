@@ -1,5 +1,6 @@
 package terminfo
 
+// header represents a Terminfo file's header.
 type header [6]int16
 
 // badMagic returns false if the correct magic number is set on the header and true otherwise.
@@ -39,13 +40,13 @@ func (h header) lenFile() int16 {
 	return h[1] + h[2] + h[3] + h[4] + h[5]
 }
 
-// extraNull returns true if an extra null byte is needed to align everything
-// on word boundaries and false otherwise.
-func (h header) isExtraNull() bool {
-	return (h.lenNames()+h.lenBools())%2 == 1
-}
-
 // len returns the length of the header in bytes.
 func (h header) len() int16 {
 	return int16(len(h) * 2)
+}
+
+// skipNull returns true if an extra null byte was added to align everything
+// on word boundaries and false otherwise.
+func (h header) skipNull() bool {
+	return (h.lenNames()+h.lenBools())%2 == 1
 }
