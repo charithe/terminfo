@@ -18,12 +18,7 @@ func TestOpen(t *testing.T) {
 	t.Log(ti.BoolCaps[caps.BackColorErase])
 	t.Log(ti.NumericCaps[caps.MaxColors])
 	t.Logf("%q", ti.StringCaps[caps.SetAForeground])
-	t.Logf("%q", ti.Parm(ti.StringCaps[caps.SetAForeground], 234, 5))
-	tci, err := tcell.LookupTerminfo(os.Getenv("TERM"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("%q", tci.TParm(ti.StringCaps[caps.SetAForeground], 234, 5))
+	t.Logf("%q", ti.Color(15, -1))
 }
 
 var result interface{}

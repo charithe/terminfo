@@ -2,23 +2,23 @@ package terminfo
 
 type stack []int
 
-func (st *stack) PushInt(v int) {
+func (st *stack) pushInt(v int) {
 	*st = append(*st, v)
 }
 
-func (st *stack) PushBool(v bool) {
+func (st *stack) pushBool(v bool) {
 	if v {
-		st.PushInt(1)
+		st.pushInt(1)
 	} else {
-		st.PushInt(0)
+		st.pushInt(0)
 	}
 }
 
-func (st *stack) PushByte(v rune) {
-	st.PushInt(int(v))
+func (st *stack) pushRune(v rune) {
+	st.pushInt(int(v))
 }
 
-func (st *stack) PopInt() (ai int) {
+func (st *stack) popInt() (ai int) {
 	if len(*st) == 0 {
 		return 0
 	}
@@ -27,19 +27,19 @@ func (st *stack) PopInt() (ai int) {
 	return
 }
 
-func (st *stack) PopTwoInt() (bi int, ai int) {
-	bi = st.PopInt()
-	ai = st.PopInt()
+func (st *stack) popTwoInt() (bi int, ai int) {
+	bi = st.popInt()
+	ai = st.popInt()
 	return
 }
 
-func (st *stack) PopBool() (ab bool) {
-	if st.PopInt() == 1 {
+func (st *stack) popBool() (ab bool) {
+	if st.popInt() == 1 {
 		return true
 	}
 	return false
 }
 
-func (st *stack) PopByte() (ar rune) {
-	return rune(st.PopInt())
+func (st *stack) popRune() (ar rune) {
+	return rune(st.popInt())
 }
