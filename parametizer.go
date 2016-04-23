@@ -3,19 +3,30 @@ package terminfo
 import (
 	"bytes"
 	"strconv"
+	"sync"
 )
 
 type parametizer struct {
-	s      string // terminfo string
-	pos    int    // position in s
-	st     stack
-	buf    *bytes.Buffer // result buffer
-	params [9]int
-	dvars  [26]int
+	s        string        // terminfo string
+	pos      int           // position in s
+	st       stack         // terminfo var stack
+	skipElse bool          // skipElse or skipThen
+	buf      *bytes.Buffer // result buffer
+	nest     int
+	params   [9]int
+	dvars    [26]int
 }
 
 // static vars
 var svars [26]int
+
+var parametizerPool = sync.Pool{
+	New: func() interface{} {
+		pz := new(parametizer)
+		pz.buf = bytes.NewBuffer(make([]byte, 0, 30))
+		return pz
+	},
+}
 
 // getparametizer returns a new initialized parametizer from the pool.
 func getParametizer(s string) (pz *parametizer) {
@@ -77,202 +88,102 @@ func scanText(pz *parametizer) stateFn {
 	}
 }
 
-func pushCode(pz *parametizer) stateFn {
-	pz.pos++
-	ai := int(pz.get() - '1')
-	if ai >= 0 && ai < len(pz.params) {
-		pz.st.Push(pz.params[ai])
-	} else {
-		pz.st.Push(0)
-	}
-	pz.pos++
-	return scanText
-}
-
-func setDSCode(pz *parametizer) stateFn {
-	pz.pos++
+func skipText(pz *parametizer) stateFn {
 	r := pz.get()
-	if r >= 'A' && r <= 'Z' {
-		svars[int(r-'A')] = pz.st.Pop()
-	} else if r >= 'a' && r <= 'z' {
-		pz.dvars[int(r-'a')] = pz.st.Pop()
-	}
-	pz.pos++
-	return scanText
-}
-
-func getDSCode(pz *parametizer) stateFn {
-	pz.pos++
-	r := pz.get()
-	if r >= 'A' && r <= 'Z' {
-		pz.st.Push(svars[int(r-'A')])
-	} else if r >= 'a' && r <= 'z' {
-		pz.st.Push(svars[int(r-'a')])
-	}
-	pz.pos++
-	return scanText
-}
-
-func pushIntCode(pz *parametizer) stateFn {
-	pz.pos++
-	var ai int
-	r := pz.get()
-	for r >= '0' && r <= '0' {
-		ai *= 10
-		ai += int(r - '0')
+	for pz.pos++; r != '%'; pz.pos++ {
 		r = pz.get()
-	}
-	pz.pos += 2
-	return scanText
-}
-
-func ifCode(pz *parametizer) stateFn {
-	ab := pz.st.PopBool()
-	if ab {
-		pz.pos++
-		return scanText
-	}
-	nest := 0
-TLOOP:
-	for ; ; pz.pos++ {
-		r := pz.get()
 		if r == eof {
 			return nil
-		} else if r != '%' {
-			continue
-		}
-		pz.pos++
-		switch pz.get() {
-		case ';':
-			if nest == 0 {
-				break TLOOP
-			}
-			nest--
-		case '?':
-			nest++
-		case 'e':
-			if nest == 0 {
-				break TLOOP
-			}
 		}
 	}
-	pz.pos++
-	return scanText
-}
-
-func elseCode(pz *parametizer) stateFn {
-	nest := 0
-ELOOP:
-	for ; ; pz.pos++ {
-		r := pz.get()
-		if r == eof {
-			return nil
-		} else if r != '%' {
-			continue
-		}
-		pz.pos++
-		switch pz.get() {
-		case ';':
-			if nest == 0 {
-				break ELOOP
-			}
-			nest--
-		case '?':
-			nest++
-		}
+	if pz.skipElse {
+		return skipElse
 	}
-	pz.pos++
-	return scanText
+	return skipThen
 }
 
 func scanCode(pz *parametizer) stateFn {
-	switch pz.get() {
+	switch r := pz.get(); r {
 	case '%':
 		pz.buf.WriteByte('%')
 	case 'i':
 		pz.params[0]++
 		pz.params[1]++
-	case 'c', 's':
-		// TODO implement
+	case 'c':
+		pz.buf.WriteRune(pz.st.PopByte())
+	case 's':
+		// no one uses this
 	case 'd':
-		ai := pz.st.Pop()
-		pz.buf.WriteString(strconv.Itoa(ai))
+		pz.buf.WriteString(strconv.Itoa(pz.st.PopInt()))
+	case ':':
+		// no one uses this
 	case 'p':
-		return pushCode
+		return pushParam
 	case 'P':
-		return setDSCode
+		return setDSVar
 	case 'g':
-		return getDSCode
+		return getDSVar
 	case '\'':
-		// TODO implement
+		pz.pos++
+		pz.st.PushByte(pz.get())
 	case '{':
-		return pushIntCode
+		return pushInt
 	case 'l':
-		// TODO implement
+		pz.st.PushInt(len(strconv.Itoa(pz.st.PopInt())))
 	case '+':
-		bi := pz.st.Pop()
-		ai := pz.st.Pop()
-		pz.st.Push(ai + bi)
+		bi, ai := pz.st.PopTwoInt()
+		pz.st.PushInt(ai + bi)
 	case '-':
-		bi := pz.st.Pop()
-		ai := pz.st.Pop()
-		pz.st.Push(ai - bi)
+		bi, ai := pz.st.PopTwoInt()
+		pz.st.PushInt(ai - bi)
 	case '*':
-		bi := pz.st.Pop()
-		ai := pz.st.Pop()
-		pz.st.Push(ai * bi)
+		bi, ai := pz.st.PopTwoInt()
+		pz.st.PushInt(ai * bi)
 	case '/':
-		bi := pz.st.Pop()
-		ai := pz.st.Pop()
+		bi, ai := pz.st.PopTwoInt()
 		if bi != 0 {
-			pz.st.Push(ai / bi)
+			pz.st.PushInt(ai / bi)
 		} else {
-			pz.st.Push(0)
+			pz.st.PushInt(0)
 		}
 	case 'm':
-		bi := pz.st.Pop()
-		ai := pz.st.Pop()
+		bi, ai := pz.st.PopTwoInt()
 		if bi != 0 {
-			pz.st.Push(ai % bi)
+			pz.st.PushInt(ai % bi)
 		} else {
-			pz.st.Push(0)
+			pz.st.PushInt(0)
 		}
 	case '&':
-		bi := pz.st.Pop()
-		ai := pz.st.Pop()
-		pz.st.Push(ai & bi)
+		bi, ai := pz.st.PopTwoInt()
+		pz.st.PushInt(ai & bi)
 	case '|':
-		bi := pz.st.Pop()
-		ai := pz.st.Pop()
-		pz.st.Push(ai | bi)
+		bi, ai := pz.st.PopTwoInt()
+		pz.st.PushInt(ai | bi)
 	case '^':
-		bi := pz.st.Pop()
-		ai := pz.st.Pop()
-		pz.st.Push(ai ^ bi)
+		bi, ai := pz.st.PopTwoInt()
+		pz.st.PushInt(ai ^ bi)
 	case '~':
-		ai := pz.st.Pop()
-		pz.st.Push(ai ^ -1)
+		ai := pz.st.PopInt()
+		pz.st.PushInt(ai ^ -1)
 	case '!':
-		ai := pz.st.Pop()
+		ai := pz.st.PopInt()
 		pz.st.PushBool(ai != 0)
 	case '=':
-		bi := pz.st.Pop()
-		ai := pz.st.Pop()
+		bi, ai := pz.st.PopTwoInt()
 		pz.st.PushBool(ai == bi)
 	case '>':
-		bi := pz.st.Pop()
-		ai := pz.st.Pop()
+		bi, ai := pz.st.PopTwoInt()
 		pz.st.PushBool(ai > bi)
 	case '<':
-		bi := pz.st.Pop()
-		ai := pz.st.Pop()
+		bi, ai := pz.st.PopTwoInt()
 		pz.st.PushBool(ai < bi)
 	case '?':
 	case ';':
 	case 't':
-		return ifCode
+		return scanThen
 	case 'e':
-		return elseCode
+		pz.skipElse = true
+		return skipText
 	default:
 		return scanText
 	}
@@ -280,34 +191,96 @@ func scanCode(pz *parametizer) stateFn {
 	return scanText
 }
 
-type stack []int
-
-func (st *stack) Push(v int) {
-	*st = append(*st, v)
-}
-
-func (st *stack) PushBool(v bool) {
-	if v {
-		st.Push(1)
+func pushParam(pz *parametizer) stateFn {
+	pz.pos++
+	ai := int(pz.get() - '1')
+	if ai >= 0 && ai < len(pz.params) {
+		pz.st.PushInt(pz.params[ai])
 	} else {
-		st.Push(0)
+		pz.st.PushInt(0)
 	}
+	pz.pos++
+	return scanText
 }
 
-func (st *stack) Pop() (v int) {
-	if len(*st) > 0 {
-		v = (*st)[len(*st)-1]
-		*st = (*st)[:len(*st)-1]
-	} else {
-		v = 0
+func setDSVar(pz *parametizer) stateFn {
+	pz.pos++
+	r := pz.get()
+	if r >= 'A' && r <= 'Z' {
+		svars[int(r-'A')] = pz.st.PopInt()
+	} else if r >= 'a' && r <= 'z' {
+		pz.dvars[int(r-'a')] = pz.st.PopInt()
 	}
-	return
+	pz.pos++
+	return scanText
 }
 
-func (st *stack) PopBool() (v bool) {
-	i := st.Pop()
-	if i == 1 {
-		return true
+func getDSVar(pz *parametizer) stateFn {
+	pz.pos++
+	r := pz.get()
+	if r >= 'A' && r <= 'Z' {
+		pz.st.PushInt(svars[int(r-'A')])
+	} else if r >= 'a' && r <= 'z' {
+		pz.st.PushInt(svars[int(r-'a')])
 	}
-	return false
+	pz.pos++
+	return scanText
+}
+
+func pushInt(pz *parametizer) stateFn {
+	pz.pos++
+	r, ai := pz.get(), 0
+	for r >= '0' && r <= '9' {
+		ai = (ai * 10) + int(r-'0')
+		pz.pos++
+		r = pz.get()
+	}
+	pz.st.PushInt(ai)
+	pz.pos++
+	return scanText
+}
+
+func scanThen(pz *parametizer) stateFn {
+	ab := pz.st.PopBool()
+	if ab {
+		pz.pos++
+		return scanText
+	}
+	pz.pos++
+	return skipText
+}
+
+func skipThen(pz *parametizer) stateFn {
+	switch pz.get() {
+	case ';':
+		if pz.nest == 0 {
+			pz.pos++
+			return scanText
+		}
+		pz.nest--
+	case '?':
+		pz.nest++
+	case 'e':
+		if pz.nest == 0 {
+			pz.pos++
+			return scanText
+		}
+	}
+	pz.pos++
+	return skipText
+}
+
+func skipElse(pz *parametizer) stateFn {
+	switch pz.get() {
+	case ';':
+		if pz.nest == 0 {
+			pz.pos++
+			return scanText
+		}
+		pz.nest--
+	case '?':
+		pz.nest++
+	}
+	pz.pos++
+	return skipText
 }

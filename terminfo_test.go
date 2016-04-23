@@ -18,12 +18,12 @@ func TestOpen(t *testing.T) {
 	t.Log(ti.BoolCaps[caps.BackColorErase])
 	t.Log(ti.NumericCaps[caps.MaxColors])
 	t.Logf("%q", ti.StringCaps[caps.SetAForeground])
-	t.Logf("%q", ti.TParm(ti.StringCaps[caps.SetAForeground], 7, 5))
+	t.Logf("%q", ti.Parm(ti.StringCaps[caps.SetAForeground], 234, 5))
 	tci, err := tcell.LookupTerminfo(os.Getenv("TERM"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("%q", tci.TParm(ti.StringCaps[caps.SetAForeground], 7, 5))
+	t.Logf("%q", tci.TParm(ti.StringCaps[caps.SetAForeground], 234, 5))
 }
 
 var result interface{}
@@ -44,7 +44,7 @@ func BenchmarkTerminfo(b *testing.B) {
 	var r string
 	v := ti.StringCaps[caps.SetAForeground]
 	for i := 0; i < b.N; i++ {
-		r = ti.TParm(v, 7, 5)
+		r = ti.Parm(v, 7, 5)
 	}
 	result = r
 }

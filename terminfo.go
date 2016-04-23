@@ -1,13 +1,11 @@
 package terminfo
 
 import (
-	"bytes"
 	"errors"
 	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/nhooyr/terminfo/caps"
 )
@@ -122,6 +120,7 @@ func readTerminfo(buf []byte) (*Terminfo, error) {
 	}
 
 	// Read the string and string table section.
+	// TODO panic if no ending character fix dis shit
 	pi, i = i, i+h.lenStrings()
 	sbuf := buf[pi:i]
 	table := buf[i : i+h.lenTable()]
@@ -137,17 +136,9 @@ func readTerminfo(buf []byte) (*Terminfo, error) {
 	return ti, nil
 }
 
-var parametizerPool = sync.Pool{
-	New: func() interface{} {
-		pz := new(parametizer)
-		pz.buf = bytes.NewBuffer(make([]byte, 0, 30))
-		return pz
-	},
-}
-
-// TParm evaluates a terminfo parameterized string, such as caps.SetAForeground,
+// Parm evaluates a terminfo parameterized string, such as caps.SetAForeground,
 // and returns the result.
-func (ti *Terminfo) TParm(s string, p ...int) string {
+func (ti *Terminfo) Parm(s string, p ...int) string {
 	pz := getParametizer(s)
 	defer pz.free()
 	// make sure we always have 9 parameters -- makes it easier
