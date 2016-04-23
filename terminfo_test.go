@@ -8,7 +8,7 @@ import (
 )
 
 func TestOpen(t *testing.T) {
-	ti, err := terminfo.Open()
+	ti, err := terminfo.OpenEnv()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,7 +23,7 @@ var result interface{}
 func BenchmarkOpen(b *testing.B) {
 	var r *terminfo.Terminfo
 	for i := 0; i < b.N; i++ {
-		r, _ = terminfo.Open()
+		r, _ = terminfo.OpenEnv()
 	}
 	result = r
 }

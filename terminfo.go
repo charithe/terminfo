@@ -20,16 +20,25 @@ type Terminfo struct {
 var (
 	errSmallFile = errors.New("terminfo: file too small")
 	errBadMagic  = errors.New("terminfo: wrong filetype for terminfo file")
+	errEmptyTerm = errors.New("terminfo: empty term name")
 )
+
+// OpenEnv calls Open with the name as $TERM.
+func OpenEnv() (ti *Terminfo, err error) {
+	return Open(os.Getenv("TERM"))
+}
 
 // Open follows the behavior described in terminfo(5) to find correct the
 // terminfo file and then return a Terminfo struct that describes the file.
-func Open() (ti *Terminfo, err error) {
+func Open(name string) (ti *Terminfo, err error) {
+	if name == "" {
+		return nil, errEmptyTerm
+	}
 	if terminfo := os.Getenv("TERMINFO"); terminfo != "" {
-		return openDir(terminfo)
+		return openDir(terminfo, name)
 	}
 	if home := os.Getenv("HOME"); home != "" {
-		ti, err = openDir(home + "/.terminfo")
+		ti, err = openDir(home+"/.terminfo", name)
 		if err == nil {
 			return
 		}
@@ -39,18 +48,16 @@ func Open() (ti *Terminfo, err error) {
 			if dir == "" {
 				dir = "/usr/share/terminfo"
 			}
-			ti, err = openDir(dir)
+			ti, err = openDir(dir, name)
 			if err == nil {
 				return
 			}
 		}
 	}
-	return openDir("/usr/share/terminfo")
+	return openDir("/usr/share/terminfo", name)
 }
 
-var name = os.Getenv("TERM")
-
-func openDir(dir string) (ti *Terminfo, err error) {
+func openDir(dir, name string) (ti *Terminfo, err error) {
 	// Try typical *nix path.
 	b, err := ioutil.ReadFile(dir + "/" + name[0:1] + "/" + name)
 	if err == nil {
