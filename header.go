@@ -10,24 +10,24 @@ func (h header) badMagic() bool {
 	return true
 }
 
-// lenNames returns the length of name section in bytes
+// lenNames returns the length of name section
 func (h header) lenNames() int16 {
 	return h[1]
 }
 
-// lenBools returns the length of boolean section in bytes
+// lenBools returns the length of boolean section
 func (h header) lenBools() int16 {
 	return h[2]
 }
 
-// lenNumeric returns the length of numeric section in int16
+// lenNumeric returns the length of numeric section
 func (h header) lenNumeric() int16 {
-	return h[3]
+	return h[3] * 2 // stored as number of int16
 }
 
-// lenStrings returns the length of string section in int16
+// lenStrings returns the length of string section
 func (h header) lenStrings() int16 {
-	return h[4]
+	return h[4] * 2 // stored as number of int16
 }
 
 // lenTable returns the length of string table in bytes.
@@ -35,7 +35,17 @@ func (h header) lenTable() int16 {
 	return h[5]
 }
 
-// needAlignment checks if a null byte is needed to align everything on word boundaries.
-func (h header) needAlignment() bool {
+func (h header) lenFile() int16 {
+	return h[1] + h[2] + h[3] + h[4] + h[5]
+}
+
+// extraNull returns true if an extra null byte is needed to align everything
+// on word boundaries and false otherwise.
+func (h header) extraNull() bool {
 	return (h.lenNames()+h.lenBools())%2 == 1
+}
+
+// len returns the length of the header in bytes.
+func (h header) len() int16 {
+	return int16(len(h) * 2)
 }

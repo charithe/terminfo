@@ -39,14 +39,6 @@ const (
 	SemiAutoRightMargin
 	CpiChangesRes
 	LpiChangesRes
-	// Rest of these are internal caps
-	BackspacesWithBs
-	CrtNoScrolling
-	NoCorrectlyWorkingCr
-	GnuHasMetaKey
-	LinefeedIsNewline
-	HasHardwareTabs
-	ReturnDoesClrEol
 	BoolCount
 )
 
@@ -85,13 +77,6 @@ const (
 	Buttons
 	BitImageEntwining
 	BitImageType
-	// Rest of these are internal caps
-	MagicCookieGlitchUl
-	CarriageReturnDelay
-	NewLineDelay
-	BackspaceDelay
-	HorizontalTabDelay
-	NumberOfFunctionKeys
 	NumericCount
 )
 
@@ -491,26 +476,5 @@ const (
 	EnterVerticalHlMode
 	SetAAttributes
 	SetPglenInch
-	// Rest of these are internal caps
-	TermcapInit2
-	TermcapReset
-	LinefeedIfNotLf
-	BackspaceIfNotBs
-	OtherNonFunctionKeys
-	ArrowKeyMap
-	AcsUlcorner
-	AcsLlcorner
-	AcsUrcorner
-	AcsLrcorner
-	AcsLtee
-	AcsRtee
-	AcsBtee
-	AcsTtee
-	AcsHline
-	AcsVline
-	AcsPlus
-	MemoryLock
-	MemoryUnlock
-	BoxChars1
 	StringCount
 )

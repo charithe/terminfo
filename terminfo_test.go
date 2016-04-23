@@ -15,5 +15,15 @@ func TestOpen(t *testing.T) {
 	t.Log(ti.Names[0])
 	t.Log(ti.BoolCaps[caps.BackColorErase])
 	t.Log(ti.NumericCaps[caps.MaxColors])
-	t.Log(ti.StringCaps[caps.SetAForeground])
+	t.Logf("%q", ti.StringCaps[caps.SetAForeground])
+}
+
+var result interface{}
+
+func BenchmarkOpen(b *testing.B) {
+	var r *terminfo.Terminfo
+	for i := 0; i < b.N; i++ {
+		r, _ = terminfo.Open()
+	}
+	result = r
 }

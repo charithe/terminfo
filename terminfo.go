@@ -1,9 +1,8 @@
 package terminfo
 
 import (
-	"encoding/binary"
 	"errors"
-	"io"
+	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
@@ -17,6 +16,11 @@ type Terminfo struct {
 	NumericCaps [caps.NumericCount]int16
 	StringCaps  [caps.StringCount]string
 }
+
+var (
+	errSmallFile = errors.New("terminfo: file too small")
+	errBadMagic  = errors.New("terminfo: wrong filetype for terminfo file")
+)
 
 // Open follows the behavior described in terminfo(5) to find correct the
 // terminfo file and then return a Terminfo struct that describes the file.
@@ -44,89 +48,80 @@ func Open() (ti *Terminfo, err error) {
 	return openDir("/usr/share/terminfo")
 }
 
+var name = os.Getenv("TERM")
+
 func openDir(dir string) (ti *Terminfo, err error) {
-	name := os.Getenv("TERM")
-	if name == "" {
-		return nil, errors.New("terminfo: no TERM envirnoment variable set")
-	}
 	// Try typical *nix path.
-	f, err := os.Open(dir + "/" + name[0:1] + "/" + name)
+	b, err := ioutil.ReadFile(dir + "/" + name[0:1] + "/" + name)
 	if err == nil {
-		return readTerminfo(f)
+		return readTerminfo(b)
 	}
 	// Fallback to darwin specific path.
-	f, err = os.Open(dir + "/" + strconv.FormatUint(uint64(name[0]), 16) + "/" + name)
-	return readTerminfo(f)
+	b, err = ioutil.ReadFile(dir + "/" + strconv.FormatUint(uint64(name[0]), 16) + "/" + name)
+	if err != nil {
+		return
+	}
+	return readTerminfo(b)
 }
 
 // TODO The value -1 is represented by the two bytes 0377, 0377; other negative values are illegal.
-func readTerminfo(r io.ReadSeeker) (ti *Terminfo, err error) {
+func readTerminfo(buf []byte) (*Terminfo, error) {
+	if len(buf) < 6 {
+		return nil, errSmallFile
+	}
 	// Read the header.
 	var h header
-	if err = binary.Read(r, binary.LittleEndian, &h); err != nil {
-		return nil, err
+	for i := 0; i < len(h); i++ {
+		h[i] = littleEndian(i*2, buf)
 	}
-
-	if h.badMagic() {
-		return nil, errors.New("terminfo: wrong filetype for terminfo file")
+	if int(h.lenFile()) > len(buf) {
+		return nil, errSmallFile
+	} else if h.badMagic() {
+		return nil, errBadMagic
 	}
 
 	// Read name section.
-	names := make([]byte, h.lenNames())
-	if _, err = io.ReadFull(r, names); err != nil {
-		return nil, err
-	}
-	ti = new(Terminfo)
-	ti.Names = strings.Split(string(names), "|")
+	pi := h.len()
+	i := pi + h.lenNames()
+	ti := &Terminfo{Names: strings.Split(string(buf[pi:i]), "|")}
 
 	// Read the boolean section.
-	bools := make([]byte, h.lenBools())
-	if _, err = io.ReadFull(r, bools); err != nil {
-		return nil, err
-	}
-	if h.needAlignment() {
-		// An extra null byte was inserted to align everything on word boundaries.
-		// Lets skip it.
-		r.Seek(1, 1)
-	}
-	for i, b := range bools {
+	pi, i = i, i+h.lenBools()
+	for i, b := range buf[pi:i] {
 		if b == 1 {
 			ti.BoolCaps[i] = true
 		}
 	}
+	if h.extraNull() {
+		// Skip extra null byte inserted to align everything on word boundaries.
+		i++
+	}
 
 	// Read the numeric section.
-	numbers := make([]int16, h.lenNumeric())
-	if err = binary.Read(r, binary.LittleEndian, numbers); err != nil {
-		return nil, err
-	}
-	for i, n := range numbers {
-		if n > -1 {
-			ti.NumericCaps[i] = n
+	pi, i = i, i+h.lenNumeric()
+	nbuf := buf[pi:i]
+	for j := 0; j < len(nbuf)-1; j += 2 {
+		if n := littleEndian(j, nbuf); n > -1 {
+			ti.NumericCaps[j/2] = n
 		}
 	}
 
-	// Read the string section.
-	strings := make([]int16, h.lenStrings())
-	if err = binary.Read(r, binary.LittleEndian, strings); err != nil {
-		return nil, err
-	}
-
-	// Read the string table section.
-	table := make([]byte, h.lenTable())
-	if _, err = io.ReadFull(r, table); err != nil {
-		return nil, err
-	}
-
-	// Read the strings referenced in the string section from the string table.
-	for i, off := range strings {
-		if off > -1 {
-			j := off
-			for ; table[j] != 0; j++ {
+	// Read the string and string table section.
+	pi, i = i, i+h.lenStrings()
+	sbuf := buf[pi:i]
+	table := buf[i : i+h.lenTable()]
+	for j := 0; j < len(sbuf)-1; j += 2 {
+		if off := littleEndian(j, sbuf); off > -1 {
+			x := off
+			for ; table[x] != 0; x++ {
 			}
-			ti.StringCaps[i] = string(table[off:j])
+			ti.StringCaps[j/2] = string(table[off:x])
 		}
 	}
 
 	return ti, nil
+}
+
+func littleEndian(i int, buf []byte) int16 {
+	return int16(buf[i+1])<<8 | int16(buf[i])
 }
