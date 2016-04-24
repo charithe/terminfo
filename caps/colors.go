@@ -2,19 +2,19 @@ package caps
 
 const (
 	Black = iota
-	Maroon
-	Green
-	Olive
-	Navy
-	Purple
-	Teal
-	Silver
-	Gray
 	Red
-	Lime
+	Green
 	Yellow
 	Blue
-	Fuchsia
-	Aqua
+	Magenta
+	Cyan
 	White
+	BrightBlack
+	BrightRed
+	BrightGreen
+	BrightYellow
+	BrightBlue
+	BrightMagenta
+	BrightCyan
+	BrightWhite
 )

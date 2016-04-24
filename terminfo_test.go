@@ -31,7 +31,15 @@ func BenchmarkOpen(b *testing.B) {
 	result = r
 }
 
-func BenchmarkTerminfo(b *testing.B) {
+func BenchmarkTcellOpen(b *testing.B) {
+	var r *tcell.Terminfo
+	for i := 0; i < b.N; i++ {
+		r, _ = tcell.LookupTerminfo(os.Getenv("TERM"))
+	}
+	result = r
+}
+
+func BenchmarkParm(b *testing.B) {
 	ti, err := terminfo.OpenEnv()
 	if err != nil {
 		b.Fatal(err)
@@ -44,7 +52,7 @@ func BenchmarkTerminfo(b *testing.B) {
 	result = r
 }
 
-func BenchmarkTcell(b *testing.B) {
+func BenchmarkTcellParm(b *testing.B) {
 	ti, err := tcell.LookupTerminfo(os.Getenv("TERM"))
 	if err != nil {
 		b.Fatal(err)

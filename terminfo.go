@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/nhooyr/terminfo/caps"
 )
@@ -15,6 +16,7 @@ var (
 	ErrSmallFile = errors.New("terminfo: file too small")
 	ErrBadMagic  = errors.New("terminfo: wrong filetype for terminfo file")
 	ErrEmptyTerm = errors.New("terminfo: empty term name")
+	ErrBadString = errors.New("terminfo: bad string")
 )
 
 // Terminfo describes a terminal's capabilities.
@@ -24,6 +26,12 @@ type Terminfo struct {
 	NumericCaps [caps.NumericCount]int16
 	StringCaps  [caps.StringCount]string
 }
+
+// Terminfo cache.
+var (
+	db      = make(map[string]*Terminfo)
+	dbMutex = new(sync.RWMutex)
+)
 
 // OpenEnv calls Open with the name as $TERM.
 func OpenEnv() (ti *Terminfo, err error) {
@@ -35,9 +43,17 @@ func OpenEnv() (ti *Terminfo, err error) {
 func Open(name string) (ti *Terminfo, err error) {
 	if name == "" {
 		return nil, ErrEmptyTerm
-	} else if terminfo := os.Getenv("TERMINFO"); terminfo != "" {
+	}
+	dbMutex.RLock()
+	ti, ok := db[name]
+	dbMutex.RUnlock()
+	if ok {
+		return
+	}
+	if terminfo := os.Getenv("TERMINFO"); terminfo != "" {
 		return openDir(terminfo, name)
-	} else if home := os.Getenv("HOME"); home != "" {
+	}
+	if home := os.Getenv("HOME"); home != "" {
 		ti, err = openDir(home+"/.terminfo", name)
 		if err == nil {
 			return
@@ -82,8 +98,6 @@ func readTerminfo(buf []byte) (*Terminfo, error) {
 	// Read the header.
 	var h header
 	for i := 0; i < len(h); i++ {
-		// TODO The value -1 is represented by the two bytes 0377, 0377; other negative values are illegal.
-		// I think this applies to all short integers. But I will wait for a email reply on the ncurses mailing list for advice on how to handle this.
 		h[i] = littleEndian(i*2, buf)
 	}
 	if int(h.lenFile()) > len(buf) {
@@ -120,18 +134,27 @@ func readTerminfo(buf []byte) (*Terminfo, error) {
 	}
 
 	// Read the string and string table section.
-	// TODO panic if no ending character fix dis shit
 	pi, i = i, i+h.lenStrings()
 	sbuf := buf[pi:i]
 	table := buf[i : i+h.lenTable()]
 	for j := 0; j < len(sbuf); j += 2 {
 		if off := littleEndian(j, sbuf); off > -1 {
-			x := off
+			x := int(off)
 			for ; table[x] != 0; x++ {
+				if x+1 >= len(table) {
+					return nil, ErrBadString
+				}
 			}
 			ti.StringCaps[j/2] = string(table[off:x])
 		}
 	}
+
+	// Cache the Terminfo struct.
+	dbMutex.Lock()
+	for i, _ := range ti.Names {
+		db[ti.Names[i]] = ti
+	}
+	dbMutex.Unlock()
 
 	return ti, nil
 }
