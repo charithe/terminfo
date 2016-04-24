@@ -41,7 +41,7 @@ func getParametizer(s string) (pz *parametizer) {
 func (pz *parametizer) free() {
 	pz.pos = 0
 	pz.nest = 0
-	pz.st = stack{}
+	pz.st = pz.st[:0]
 	pz.buf.Reset()
 	pz.params = [9]int{}
 	pz.dvars = [26]int{}
