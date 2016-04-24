@@ -149,28 +149,6 @@ func (ti *Terminfo) Parm(s string, p ...int) string {
 	return pz.run()
 }
 
-// Note that the order of these options is important -- it follows the
-// definitions used by ECMA and XTerm.  Hence any further named colors
-// must begin at a value not less than 256.
-const (
-	ColorBlack = iota
-	ColorMaroon
-	ColorGreen
-	ColorOlive
-	ColorNavy
-	ColorPurple
-	ColorTeal
-	ColorSilver
-	ColorGray
-	ColorRed
-	ColorLime
-	ColorYellow
-	ColorBlue
-	ColorFuchsia
-	ColorAqua
-	ColorWhite
-)
-
 func (ti *Terminfo) Color(fg, bg int) (rv string) {
 	maxColors := int(ti.NumericCaps[caps.MaxColors])
 	if maxColors > fg && fg >= 0 {
