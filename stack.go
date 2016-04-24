@@ -14,7 +14,7 @@ func (st *stack) pushBool(v bool) {
 	}
 }
 
-func (st *stack) pushRune(v rune) {
+func (st *stack) pushByte(v byte) {
 	st.pushInt(int(v))
 }
 
@@ -40,6 +40,6 @@ func (st *stack) popBool() (ab bool) {
 	return false
 }
 
-func (st *stack) popRune() (ar rune) {
-	return rune(st.popInt())
+func (st *stack) popByte() (ar byte) {
+	return byte(st.popInt())
 }
