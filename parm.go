@@ -19,6 +19,19 @@ type parametizer struct {
 	dvars    [26]interface{} // dynamic vars
 }
 
+// Parm evaluates a terminfo parameterized string, such as cap.SetAForeground,
+// and returns the result.
+func Parm(s string, p ...interface{}) string {
+	pz := getParametizer(s)
+	defer pz.free()
+	// make sure we always have 9 parameters -- makes it easier
+	// later to skip checks and its faster
+	for i := 0; i < len(pz.params) && i < len(p); i++ {
+		pz.params[i] = p[i]
+	}
+	return pz.run()
+}
+
 // static vars
 var svars [26]interface{}
 
@@ -77,7 +90,6 @@ func (pz *parametizer) writeFrom(ppos int) {
 // scanText scans until the next code.
 func scanText(pz *parametizer) stateFn {
 	ppos := pz.pos
-	// Find next verb.
 	for {
 		ch, err := pz.get()
 		if err != nil {
@@ -210,9 +222,9 @@ func setDSVar(pz *parametizer) stateFn {
 		return nil
 	}
 	if ch >= 'A' && ch <= 'Z' {
-		svars[int(ch-'A')] = pz.st.popInt()
+		svars[int(ch-'A')] = pz.st.pop()
 	} else if ch >= 'a' && ch <= 'z' {
-		pz.dvars[int(ch-'a')] = pz.st.popInt()
+		pz.dvars[int(ch-'a')] = pz.st.pop()
 	}
 	pz.pos++
 	return scanText
@@ -263,7 +275,10 @@ func scanThen(pz *parametizer) stateFn {
 
 func skipText(pz *parametizer) stateFn {
 	ch, err := pz.get()
-	for pz.pos++; ch != '%'; pz.pos++ {
+	if err != nil {
+		return nil
+	}
+	for pz.pos++; ch != '%'; pz.pos++{
 		ch, err = pz.get()
 		if err != nil {
 			return nil

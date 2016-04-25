@@ -6,7 +6,7 @@ import (
 
 	"github.com/gdamore/tcell"
 	"github.com/nhooyr/terminfo"
-	"github.com/nhooyr/terminfo/caps"
+	"github.com/nhooyr/terminfo/cap"
 )
 
 func TestOpen(t *testing.T) {
@@ -15,9 +15,9 @@ func TestOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log(ti.Names[0])
-	t.Log(ti.BoolCaps[caps.BackColorErase])
-	t.Log(ti.NumericCaps[caps.MaxColors])
-	t.Logf("%q", ti.StringCaps[caps.SetAForeground])
+	t.Log(ti.BoolCaps[cap.BackColorErase])
+	t.Log(ti.NumericCaps[cap.MaxColors])
+	t.Logf("%q", ti.StringCaps[cap.SetAForeground])
 	t.Logf("%q", ti.Color(15, -1))
 }
 
@@ -46,9 +46,9 @@ func BenchmarkParm(b *testing.B) {
 		b.Fatal(err)
 	}
 	var r string
-	v := ti.StringCaps[caps.SetAForeground]
+	v := ti.StringCaps[cap.SetAForeground]
 	for i := 0; i < b.N; i++ {
-		r = ti.Parm(v, 7, 5)
+		r = terminfo.Parm(v, 7, 5)
 	}
 	result = r
 }

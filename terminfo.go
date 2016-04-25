@@ -105,7 +105,7 @@ func readHeader(buf []byte) (h header, err error) {
 }
 
 // TODO FINISH TOMORROW
-type terminfoReader struct {
+type reader struct {
 	pos, ppos int
 	buf       []byte
 	ti        *Terminfo
@@ -174,26 +174,13 @@ func readTerminfo(buf []byte) (*Terminfo, error) {
 	return ti, nil
 }
 
-// Parm evaluates a terminfo parameterized string, such as cap.SetAForeground,
-// and returns the result.
-func (ti *Terminfo) Parm(s string, p ...interface{}) string {
-	pz := getParametizer(s)
-	defer pz.free()
-	// make sure we always have 9 parameters -- makes it easier
-	// later to skip checks and its faster
-	for i := 0; i < len(pz.params) && i < len(p); i++ {
-		pz.params[i] = p[i]
-	}
-	return pz.run()
-}
-
 func (ti *Terminfo) Color(fg, bg int) (rv string) {
 	maxColors := int(ti.NumericCaps[cap.MaxColors])
 	if maxColors > fg && fg >= 0 {
-		rv += ti.Parm(ti.StringCaps[cap.SetAForeground], fg)
+		rv += Parm(ti.StringCaps[cap.SetAForeground], fg)
 	}
 	if maxColors > bg && bg >= 0 {
-		rv += ti.Parm(ti.StringCaps[cap.SetABackground], bg)
+		rv += Parm(ti.StringCaps[cap.SetABackground], bg)
 	}
 	return
 }
