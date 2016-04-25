@@ -40,6 +40,7 @@ func BenchmarkTcellOpen(b *testing.B) {
 }
 
 func BenchmarkParm(b *testing.B) {
+	// TODO GLOBAL
 	ti, err := terminfo.OpenEnv()
 	if err != nil {
 		b.Fatal(err)

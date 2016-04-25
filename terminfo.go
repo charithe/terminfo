@@ -88,22 +88,37 @@ func openDir(dir, name string) (ti *Terminfo, err error) {
 	return readTerminfo(b)
 }
 
-// readTerminfo reads the Terminfo file in buf into a Terminfo struct and returns it.
-// TODO extended reader
-// TODO break this function up
-func readTerminfo(buf []byte) (*Terminfo, error) {
+func readHeader(buf []byte) (h header, err error) {
 	if len(buf) < 6 {
-		return nil, ErrSmallFile
+		return h, ErrSmallFile
 	}
-	// Read the header.
-	var h header
 	for i := 0; i < len(h); i++ {
 		h[i] = littleEndian(i*2, buf)
 	}
 	if int(h.lenFile()) > len(buf) {
-		return nil, ErrSmallFile
-	} else if h.badMagic() {
-		return nil, ErrBadMagic
+		return h, ErrSmallFile
+	}
+	if h.badMagic() {
+		return h, ErrBadMagic
+	}
+	return
+}
+
+// TODO FINISH TOMORROW
+type terminfoReader struct {
+	pos, ppos int
+	buf       []byte
+	ti        *Terminfo
+	h         header
+}
+
+// readTerminfo reads the Terminfo file in buf into a Terminfo struct and returns it.
+// TODO extended reader
+// TODO break this function up
+func readTerminfo(buf []byte) (*Terminfo, error) {
+	h, err := readHeader(buf)
+	if err != nil {
+		return nil, err
 	}
 
 	// Read name section.
@@ -161,11 +176,11 @@ func readTerminfo(buf []byte) (*Terminfo, error) {
 
 // Parm evaluates a terminfo parameterized string, such as caps.SetAForeground,
 // and returns the result.
-func (ti *Terminfo) Parm(s string, p ...int) string {
+func (ti *Terminfo) Parm(s string, p ...interface{}) string {
 	pz := getParametizer(s)
 	defer pz.free()
 	// make sure we always have 9 parameters -- makes it easier
-	// later to skip checks
+	// later to skip checks and its faster
 	for i := 0; i < len(pz.params) && i < len(p); i++ {
 		pz.params[i] = p[i]
 	}

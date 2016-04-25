@@ -9,18 +9,18 @@ import (
 
 // parametizer represents the scanners state.
 type parametizer struct {
-	s        string        // terminfo string
-	pos      int           // position in s
-	nest     int           // nesting level of if statements
-	st       stack         // terminfo var stack
-	skipElse bool          // see skipText.
-	buf      *bytes.Buffer // result buffer
-	params   [9]int        // paramters
-	dvars    [26]int       // dynamic vars
+	s        string          // terminfo string
+	pos      int             // position in s
+	nest     int             // nesting level of if statements
+	st       stack           // terminfo var stack
+	skipElse bool            // see skipText.
+	buf      *bytes.Buffer   // result buffer
+	params   [9]interface{}  // paramters
+	dvars    [26]interface{} // dynamic vars
 }
 
 // static vars
-var svars [26]int
+var svars [26]interface{}
 
 var parametizerPool = sync.Pool{
 	New: func() interface{} {
@@ -43,8 +43,8 @@ func (pz *parametizer) free() {
 	pz.nest = 0
 	pz.st = pz.st[:0]
 	pz.buf.Reset()
-	pz.params = [9]int{}
-	pz.dvars = [26]int{}
+	pz.params = [9]interface{}{}
+	pz.dvars = [26]interface{}{}
 	parametizerPool.Put(pz)
 }
 
@@ -83,7 +83,8 @@ func scanText(pz *parametizer) stateFn {
 		if err != nil {
 			pz.writeFrom(ppos)
 			return nil
-		} else if ch == '%' {
+		}
+		if ch == '%' {
 			pz.writeFrom(ppos)
 			pz.pos++
 			return scanCode
@@ -101,16 +102,16 @@ func scanCode(pz *parametizer) stateFn {
 	case '%':
 		pz.buf.WriteByte('%')
 	case 'i':
-		pz.params[0]++
-		pz.params[1]++
+		pz.params[0] = pz.params[0].(int) + 1
+		pz.params[1] = pz.params[1].(int) + 1
 	case 'c':
 		pz.buf.WriteByte(pz.st.popByte())
 	case 's':
-		// no one uses this
+		pz.buf.WriteString(pz.st.popString())
 	case 'd':
 		pz.buf.WriteString(strconv.Itoa(pz.st.popInt()))
 	case ':':
-		// no one uses this
+		// TODO implement
 	case 'p':
 		pz.pos++
 		return pushParam
@@ -126,59 +127,57 @@ func scanCode(pz *parametizer) stateFn {
 		if err != nil {
 			return nil
 		}
-		pz.st.pushByte(ch)
+		pz.st.push(ch)
 	case '{':
 		pz.pos++
 		return pushInt
 	case 'l':
-		pz.st.pushInt(len(strconv.Itoa(pz.st.popInt())))
+		pz.st.push(len(pz.st.popString()))
 	case '+':
 		bi, ai := pz.st.popTwoInt()
-		pz.st.pushInt(ai + bi)
+		pz.st.push(ai + bi)
 	case '-':
 		bi, ai := pz.st.popTwoInt()
-		pz.st.pushInt(ai - bi)
+		pz.st.push(ai - bi)
 	case '*':
 		bi, ai := pz.st.popTwoInt()
-		pz.st.pushInt(ai * bi)
+		pz.st.push(ai * bi)
 	case '/':
 		bi, ai := pz.st.popTwoInt()
 		if bi != 0 {
-			pz.st.pushInt(ai / bi)
+			pz.st.push(ai / bi)
 		} else {
-			pz.st.pushInt(0)
+			pz.st.push(0)
 		}
 	case 'm':
 		bi, ai := pz.st.popTwoInt()
 		if bi != 0 {
-			pz.st.pushInt(ai % bi)
+			pz.st.push(ai % bi)
 		} else {
-			pz.st.pushInt(0)
+			pz.st.push(0)
 		}
 	case '&':
 		bi, ai := pz.st.popTwoInt()
-		pz.st.pushInt(ai & bi)
+		pz.st.push(ai & bi)
 	case '|':
 		bi, ai := pz.st.popTwoInt()
-		pz.st.pushInt(ai | bi)
+		pz.st.push(ai | bi)
 	case '^':
 		bi, ai := pz.st.popTwoInt()
-		pz.st.pushInt(ai ^ bi)
+		pz.st.push(ai ^ bi)
 	case '~':
-		ai := pz.st.popInt()
-		pz.st.pushInt(ai ^ -1)
+		pz.st.push(pz.st.popInt() ^ -1)
 	case '!':
-		ai := pz.st.popInt()
-		pz.st.pushBool(ai != 0)
+		pz.st.push(pz.st.popInt() != 0)
 	case '=':
 		bi, ai := pz.st.popTwoInt()
-		pz.st.pushBool(ai == bi)
+		pz.st.push(ai == bi)
 	case '>':
 		bi, ai := pz.st.popTwoInt()
-		pz.st.pushBool(ai > bi)
+		pz.st.push(ai > bi)
 	case '<':
 		bi, ai := pz.st.popTwoInt()
-		pz.st.pushBool(ai < bi)
+		pz.st.push(ai < bi)
 	case '?':
 	case ';':
 	case 't':
@@ -197,9 +196,9 @@ func pushParam(pz *parametizer) stateFn {
 		return nil
 	}
 	if ai := int(ch - '1'); ai >= 0 && ai < len(pz.params) {
-		pz.st.pushInt(pz.params[ai])
+		pz.st.push(pz.params[ai])
 	} else {
-		pz.st.pushInt(0)
+		pz.st.push(0)
 	}
 	pz.pos++
 	return scanText
@@ -225,9 +224,9 @@ func getDSVar(pz *parametizer) stateFn {
 		return nil
 	}
 	if ch >= 'A' && ch <= 'Z' {
-		pz.st.pushInt(svars[int(ch-'A')])
+		pz.st.push(svars[int(ch-'A')])
 	} else if ch >= 'a' && ch <= 'z' {
-		pz.st.pushInt(svars[int(ch-'a')])
+		pz.st.push(svars[int(ch-'a')])
 	}
 	pz.pos++
 	return scanText
@@ -247,7 +246,7 @@ func pushInt(pz *parametizer) stateFn {
 			return nil
 		}
 	}
-	pz.st.pushInt(ai)
+	pz.st.push(ai)
 	pz.pos++
 	return scanText
 }
