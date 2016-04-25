@@ -13,7 +13,7 @@ type parametizer struct {
 	pos      int             // position in s
 	nest     int             // nesting level of if statements
 	st       stack           // terminfo var stack
-	skipElse bool            // see skipText.
+	skipElse bool            // controls which fuction skipText returns
 	buf      *bytes.Buffer   // result buffer
 	params   [9]interface{}  // paramters
 	dvars    [26]interface{} // dynamic vars
@@ -278,7 +278,7 @@ func skipText(pz *parametizer) stateFn {
 	if err != nil {
 		return nil
 	}
-	for pz.pos++; ch != '%'; pz.pos++{
+	for pz.pos++; ch != '%'; pz.pos++ {
 		ch, err = pz.get()
 		if err != nil {
 			return nil

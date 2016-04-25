@@ -1,3 +1,4 @@
+// TODO plural name??
 package cap
 
 // Boolean capabilities

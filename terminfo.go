@@ -2,21 +2,12 @@ package terminfo
 
 import (
 	"errors"
-	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/nhooyr/terminfo/cap"
-)
-
-// Package errors.
-var (
-	ErrSmallFile = errors.New("terminfo: file too small")
-	ErrBadMagic  = errors.New("terminfo: wrong filetype for terminfo file")
-	ErrEmptyTerm = errors.New("terminfo: empty term name")
-	ErrBadString = errors.New("terminfo: bad string")
 )
 
 // Terminfo describes a terminal's capabilities.
@@ -38,8 +29,10 @@ func OpenEnv() (ti *Terminfo, err error) {
 	return Open(os.Getenv("TERM"))
 }
 
+var ErrEmptyTerm = errors.New("terminfo: empty term name")
+
 // Open follows the behavior described in terminfo(5) to find correct the terminfo file
-// using the name and then return a Terminfo struct that describes the file.
+// using the name and then returns a Terminfo struct that describes the file.
 func Open(name string) (ti *Terminfo, err error) {
 	if name == "" {
 		return nil, ErrEmptyTerm
@@ -74,104 +67,28 @@ func Open(name string) (ti *Terminfo, err error) {
 }
 
 // openDir reads the Terminfo file specified by the dir and name.
-func openDir(dir, name string) (ti *Terminfo, err error) {
+func openDir(dir, name string) (*Terminfo, error) {
 	// Try typical *nix path.
-	b, err := ioutil.ReadFile(dir + "/" + name[0:1] + "/" + name)
-	if err == nil {
-		return readTerminfo(b)
-	}
-	// Fallback to the darwin specific path.
-	b, err = ioutil.ReadFile(dir + "/" + strconv.FormatUint(uint64(name[0]), 16) + "/" + name)
+	f, err := os.Open(dir + "/" + name[0:1] + "/" + name)
 	if err != nil {
-		return
+		// Fallback to the darwin specific path.
+		f, err = os.Open(dir + "/" + strconv.FormatUint(uint64(name[0]), 16) + "/" + name)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return readTerminfo(b)
-}
-
-func readHeader(buf []byte) (h header, err error) {
-	if len(buf) < 6 {
-		return h, ErrSmallFile
-	}
-	for i := 0; i < len(h); i++ {
-		h[i] = littleEndian(i*2, buf)
-	}
-	if int(h.lenFile()) > len(buf) {
-		return h, ErrSmallFile
-	}
-	if h.badMagic() {
-		return h, ErrBadMagic
-	}
-	return
-}
-
-// TODO FINISH TOMORROW
-type reader struct {
-	pos, ppos int
-	buf       []byte
-	ti        *Terminfo
-	h         header
-}
-
-// readTerminfo reads the Terminfo file in buf into a Terminfo struct and returns it.
-// TODO extended reader
-// TODO break this function up
-func readTerminfo(buf []byte) (*Terminfo, error) {
-	h, err := readHeader(buf)
-	if err != nil {
+	r := readerPool.Get().(*reader)
+	defer r.free()
+	if err = r.read(f); err != nil {
 		return nil, err
 	}
-
-	// Read name section.
-	pi := h.len()
-	i := pi + h.lenNames()
-	ti := new(Terminfo)
-	ti.Names = strings.Split(string(buf[pi:i]), "|")
-
-	// Read the boolean section.
-	pi, i = i, i+h.lenBools()
-	for i, b := range buf[pi:i] {
-		if b == 1 {
-			ti.BoolCaps[i] = true
-		}
-	}
-	if h.skipNull() {
-		// Skip extra null byte inserted to align everything on word boundaries.
-		i++
-	}
-
-	// Read the numeric section.
-	pi, i = i, i+h.lenNumeric()
-	nbuf := buf[pi:i]
-	for j := 0; j < len(nbuf); j += 2 {
-		if n := littleEndian(j, nbuf); n > -1 {
-			ti.NumericCaps[j/2] = n
-		}
-	}
-
-	// Read the string and string table section.
-	pi, i = i, i+h.lenStrings()
-	sbuf := buf[pi:i]
-	table := buf[i : i+h.lenTable()]
-	for j := 0; j < len(sbuf); j += 2 {
-		if off := littleEndian(j, sbuf); off > -1 {
-			x := int(off)
-			for ; table[x] != 0; x++ {
-				if x+1 >= len(table) {
-					return nil, ErrBadString
-				}
-			}
-			ti.StringCaps[j/2] = string(table[off:x])
-		}
-	}
-
 	// Cache the Terminfo struct.
 	dbMutex.Lock()
-	for i, _ := range ti.Names {
-		db[ti.Names[i]] = ti
+	for i := range r.ti.Names {
+		db[r.ti.Names[i]] = r.ti
 	}
 	dbMutex.Unlock()
-
-	return ti, nil
+	return r.ti, nil
 }
 
 func (ti *Terminfo) Color(fg, bg int) (rv string) {
