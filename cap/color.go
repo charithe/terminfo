@@ -1,5 +1,6 @@
-package caps
+package cap
 
+// TODO put these in their own package
 const (
 	Black = iota
 	Red

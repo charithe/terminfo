@@ -1,4 +1,4 @@
-package caps
+package cap
 
 // Boolean capabilities
 const (

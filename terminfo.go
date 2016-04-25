@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/nhooyr/terminfo/caps"
+	"github.com/nhooyr/terminfo/cap"
 )
 
 // Package errors.
@@ -22,9 +22,9 @@ var (
 // Terminfo describes a terminal's capabilities.
 type Terminfo struct {
 	Names       []string
-	BoolCaps    [caps.BoolCount]bool
-	NumericCaps [caps.NumericCount]int16
-	StringCaps  [caps.StringCount]string
+	BoolCaps    [cap.BoolCount]bool
+	NumericCaps [cap.NumericCount]int16
+	StringCaps  [cap.StringCount]string
 }
 
 // Terminfo cache.
@@ -174,7 +174,7 @@ func readTerminfo(buf []byte) (*Terminfo, error) {
 	return ti, nil
 }
 
-// Parm evaluates a terminfo parameterized string, such as caps.SetAForeground,
+// Parm evaluates a terminfo parameterized string, such as cap.SetAForeground,
 // and returns the result.
 func (ti *Terminfo) Parm(s string, p ...interface{}) string {
 	pz := getParametizer(s)
@@ -188,12 +188,12 @@ func (ti *Terminfo) Parm(s string, p ...interface{}) string {
 }
 
 func (ti *Terminfo) Color(fg, bg int) (rv string) {
-	maxColors := int(ti.NumericCaps[caps.MaxColors])
+	maxColors := int(ti.NumericCaps[cap.MaxColors])
 	if maxColors > fg && fg >= 0 {
-		rv += ti.Parm(ti.StringCaps[caps.SetAForeground], fg)
+		rv += ti.Parm(ti.StringCaps[cap.SetAForeground], fg)
 	}
 	if maxColors > bg && bg >= 0 {
-		rv += ti.Parm(ti.StringCaps[caps.SetABackground], bg)
+		rv += ti.Parm(ti.StringCaps[cap.SetABackground], bg)
 	}
 	return
 }
