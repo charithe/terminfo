@@ -7,15 +7,18 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/nhooyr/terminfo/cap"
+	"github.com/nhooyr/terminfo/caps"
 )
 
 // Terminfo describes a terminal's capabilities.
 type Terminfo struct {
-	Names       []string
-	BoolCaps    [cap.BoolCount]bool
-	NumericCaps [cap.NumericCount]int16
-	StringCaps  [cap.StringCount]string
+	Names      []string
+	Bools      [caps.BoolCount]bool
+	Numbers    [caps.NumberCount]int16
+	Strings    [caps.StringCount]string
+	ExtBools   map[string]bool
+	ExtNumbers map[string]int16
+	ExtStrings map[string]string
 }
 
 // Terminfo cache.
@@ -92,12 +95,12 @@ func openDir(dir, name string) (*Terminfo, error) {
 }
 
 func (ti *Terminfo) Color(fg, bg int) (rv string) {
-	maxColors := int(ti.NumericCaps[cap.MaxColors])
+	maxColors := int(ti.Numbers[caps.MaxColors])
 	if maxColors > fg && fg >= 0 {
-		rv += Parm(ti.StringCaps[cap.SetAForeground], fg)
+		rv += Parm(ti.Strings[caps.SetAForeground], fg)
 	}
 	if maxColors > bg && bg >= 0 {
-		rv += Parm(ti.StringCaps[cap.SetABackground], bg)
+		rv += Parm(ti.Strings[caps.SetABackground], bg)
 	}
 	return
 }

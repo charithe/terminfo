@@ -1,4 +1,4 @@
-package cap
+package caps
 
 // TODO put these in their own package
 const (

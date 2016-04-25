@@ -3,9 +3,12 @@ package terminfo
 import (
 	"errors"
 	"io"
+	"log"
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/nhooyr/terminfo/caps"
 )
 
 var (
@@ -35,8 +38,8 @@ func (h header) lenBools() int16 {
 	return h[2]
 }
 
-// lenNumeric returns the length of numeric section
-func (h header) lenNumeric() int16 {
+// lenNumbers returns the length of numbers section
+func (h header) lenNumbers() int16 {
 	return h[3] * 2 // stored as number of int16
 }
 
@@ -60,13 +63,11 @@ func (h header) len() int16 {
 	return int16(len(h) * 2)
 }
 
-// skipNull returns true if an extra null byte was added to align everything
-// on word boundaries and false otherwise.
-func (h header) skipNull() bool {
-	return (h.lenNames()+h.lenBools())%2 == 1
+// littleEndian decodes a int16 starting at i in buf using little-endian byte order.
+func littleEndian(i int, buf []byte) int16 {
+	return int16(buf[i+1])<<8 | int16(buf[i])
 }
 
-// TODO extended reader
 type reader struct {
 	pos, ppos int16
 	buf       []byte
@@ -97,36 +98,46 @@ func (r *reader) sliceOff(off int16) []byte {
 	return r.slice()
 }
 
-func (r *reader) read(f *os.File) error {
-	if err := r.readHeader(f); err != nil {
-		return err
+func (r *reader) read(f *os.File) (err error) {
+	fi, err := f.Stat()
+	if err != nil {
+		return
+	}
+	s := int(fi.Size())
+	if s < len(r.h) {
+		return ErrSmallFile
+	}
+	if s > len(r.buf) {
+		r.buf = make([]byte, s*2+1)
+	}
+	if _, err = io.ReadAtLeast(f, r.buf, s); err != nil {
+		return
+	}
+	if err = r.readHeader(); err != nil {
+		return
+	}
+	hl := int(r.h.lenFile())
+	if s < hl {
+		return ErrSmallFile
 	}
 	r.readNames()
 	r.readBools()
 	r.readNumbers()
-	return r.readStrings()
+	if err = r.readStrings(); err != nil {
+		return
+	}
+	if s > hl {
+		if hl%2 == 1 {
+			r.pos++
+		}
+		log.Println("extended")
+	}
+	return nil
 }
 
-func (r *reader) readHeader(f *os.File) error {
-	fi, err := f.Stat()
-	if err != nil {
-		return err
-	}
-	s := fi.Size()
-	if s < int64(len(r.h)) {
-		return ErrSmallFile
-	}
-	if s < int64(len(r.buf)) {
-		r.buf = make([]byte, s)
-	}
-	if _, err = io.ReadFull(f, r.buf); err != nil {
-		return err
-	}
+func (r *reader) readHeader() error {
 	for i := 0; i < len(r.h); i++ {
 		r.h[i] = littleEndian(i*2, r.buf)
-	}
-	if int(r.h.lenFile()) > len(r.buf) {
-		return ErrSmallFile
 	}
 	if r.h.badMagic() {
 		return ErrBadMagic
@@ -142,22 +153,25 @@ func (r *reader) readNames() {
 }
 
 func (r *reader) readBools() {
+	if r.h.lenBools() > caps.BoolCount {
+		return
+	}
 	for i, b := range r.sliceOff(r.h.lenBools()) {
 		if b == 1 {
-			r.ti.BoolCaps[i] = true
+			r.ti.Bools[i] = true
 		}
 	}
-	if r.h.skipNull() {
+	if (r.h.lenNames()+r.h.lenBools())%2 == 1 {
 		// Skip extra null byte inserted to align everything on word boundaries.
 		r.pos++
 	}
 }
 
 func (r *reader) readNumbers() {
-	nbuf := r.sliceOff(r.h.lenNumeric())
+	nbuf := r.sliceOff(r.h.lenNumbers())
 	for j := 0; j < len(nbuf); j += 2 {
 		if n := littleEndian(j, nbuf); n > -1 {
-			r.ti.NumericCaps[j/2] = n
+			r.ti.Numbers[j/2] = n
 		}
 	}
 }
@@ -165,7 +179,7 @@ func (r *reader) readNumbers() {
 func (r *reader) readStrings() error {
 	// Read the string and string table section.
 	sbuf := r.sliceOff(r.h.lenStrings())
-	table := r.buf[r.pos : r.pos+r.h.lenTable()]
+	table := r.sliceOff(r.h.lenTable())
 	for j := 0; j < len(sbuf); j += 2 {
 		if off := littleEndian(j, sbuf); off > -1 {
 			x := int(off)
@@ -174,7 +188,7 @@ func (r *reader) readStrings() error {
 					return ErrBadString
 				}
 			}
-			r.ti.StringCaps[j/2] = string(table[off:x])
+			r.ti.Strings[j/2] = string(table[off:x])
 		}
 	}
 	return nil

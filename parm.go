@@ -13,13 +13,13 @@ func (st *stack) push(v interface{}) {
 	*st = append(*st, v)
 }
 
-func (st *stack) pop() (v interface{}) {
+func (st *stack) pop() interface{} {
 	if len(*st) == 0 {
 		return nil
 	}
-	v = (*st)[len(*st)-1]
+	v := (*st)[len(*st)-1]
 	*st = (*st)[:len(*st)-1]
-	return
+	return v
 }
 
 func (st *stack) popInt() int {
@@ -27,12 +27,6 @@ func (st *stack) popInt() int {
 		return ai
 	}
 	return 0
-}
-
-func (st *stack) popTwoInt() (bi int, ai int) {
-	bi = st.popInt()
-	ai = st.popInt()
-	return
 }
 
 func (st *stack) popBool() bool {
@@ -80,10 +74,10 @@ var parametizerPool = sync.Pool{
 }
 
 // getparametizer returns a new initialized parametizer from the pool.
-func getParametizer(s string) (pz *parametizer) {
-	pz = parametizerPool.Get().(*parametizer)
+func getParametizer(s string) *parametizer {
+	pz := parametizerPool.Get().(*parametizer)
 	pz.s = s
-	return
+	return pz
 }
 
 // free resets the parametizer.
@@ -195,49 +189,49 @@ func scanCode(pz *parametizer) stateFn {
 	case 'l':
 		pz.st.push(len(pz.st.popString()))
 	case '+':
-		bi, ai := pz.st.popTwoInt()
+		bi, ai := pz.st.popInt(), pz.st.popInt()
 		pz.st.push(ai + bi)
 	case '-':
-		bi, ai := pz.st.popTwoInt()
+		bi, ai := pz.st.popInt(), pz.st.popInt()
 		pz.st.push(ai - bi)
 	case '*':
-		bi, ai := pz.st.popTwoInt()
+		bi, ai := pz.st.popInt(), pz.st.popInt()
 		pz.st.push(ai * bi)
 	case '/':
-		bi, ai := pz.st.popTwoInt()
+		bi, ai := pz.st.popInt(), pz.st.popInt()
 		if bi != 0 {
 			pz.st.push(ai / bi)
 		} else {
 			pz.st.push(0)
 		}
 	case 'm':
-		bi, ai := pz.st.popTwoInt()
+		bi, ai := pz.st.popInt(), pz.st.popInt()
 		if bi != 0 {
 			pz.st.push(ai % bi)
 		} else {
 			pz.st.push(0)
 		}
 	case '&':
-		bi, ai := pz.st.popTwoInt()
+		bi, ai := pz.st.popInt(), pz.st.popInt()
 		pz.st.push(ai & bi)
 	case '|':
-		bi, ai := pz.st.popTwoInt()
+		bi, ai := pz.st.popInt(), pz.st.popInt()
 		pz.st.push(ai | bi)
 	case '^':
-		bi, ai := pz.st.popTwoInt()
+		bi, ai := pz.st.popInt(), pz.st.popInt()
 		pz.st.push(ai ^ bi)
 	case '~':
 		pz.st.push(pz.st.popInt() ^ -1)
 	case '!':
 		pz.st.push(pz.st.popInt() != 0)
 	case '=':
-		bi, ai := pz.st.popTwoInt()
+		bi, ai := pz.st.popInt(), pz.st.popInt()
 		pz.st.push(ai == bi)
 	case '>':
-		bi, ai := pz.st.popTwoInt()
+		bi, ai := pz.st.popInt(), pz.st.popInt()
 		pz.st.push(ai > bi)
 	case '<':
-		bi, ai := pz.st.popTwoInt()
+		bi, ai := pz.st.popInt(), pz.st.popInt()
 		pz.st.push(ai < bi)
 	case '?':
 	case ';':

@@ -15,9 +15,9 @@ func TestOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log(ti.Names[0])
-	t.Log(ti.BoolCaps[cap.BackColorErase])
-	t.Log(ti.NumericCaps[cap.MaxColors])
-	t.Logf("%q", ti.StringCaps[cap.SetAForeground])
+	t.Log(ti.Bools[cap.BackColorErase])
+	t.Log(ti.Numbers[cap.MaxColors])
+	t.Logf("%q", ti.Strings[cap.SetAForeground])
 	t.Logf("%q", ti.Color(15, -1))
 }
 
@@ -46,7 +46,7 @@ func BenchmarkParm(b *testing.B) {
 		b.Fatal(err)
 	}
 	var r string
-	v := ti.StringCaps[cap.SetAForeground]
+	v := ti.Strings[cap.SetAForeground]
 	for i := 0; i < b.N; i++ {
 		r = terminfo.Parm(v, 7, 5)
 	}

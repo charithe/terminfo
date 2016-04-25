@@ -1,5 +1,4 @@
-// TODO plural name??
-package cap
+package caps
 
 // Boolean capabilities
 const (
@@ -40,10 +39,18 @@ const (
 	SemiAutoRightMargin
 	CpiChangesRes
 	LpiChangesRes
+	// Rest are ncurses internal capabilities.
+	BackspacesWithBs
+	CrtNoScrolling
+	NoCorrectlyWorkingCr
+	GnuHasMetaKey
+	LinefeedIsNewline
+	HasHardwareTabs
+	ReturnDoesClrEol
 	BoolCount
 )
 
-// Numeric capabilities
+// Number capabilities
 const (
 	Columns = iota
 	InitTabs
@@ -78,7 +85,14 @@ const (
 	Buttons
 	BitImageEntwining
 	BitImageType
-	NumericCount
+	// Rest are ncurses internal capabilities.
+	MagicCookieGlitchUl
+	CarriageReturnDelay
+	NewLineDelay
+	BackspaceDelay
+	HorizontalTabDelay
+	NumberOfFunctionKeys
+	NumberCount
 )
 
 // String capabilities
@@ -477,5 +491,26 @@ const (
 	EnterVerticalHlMode
 	SetAAttributes
 	SetPglenInch
+	// Rest are ncurses internal capabilities.
+	TermcapInit2
+	TermcapReset
+	LinefeedIfNotLf
+	BackspaceIfNotBs
+	OtherNonFunctionKeys
+	ArrowKeyMap
+	AcsUlcorner
+	AcsLlcorner
+	AcsUrcorner
+	AcsLrcorner
+	AcsLtee
+	AcsRtee
+	AcsBtee
+	AcsTtee
+	AcsHline
+	AcsVline
+	AcsPlus
+	MemoryLock
+	MemoryUnlock
+	BoxChars1
 	StringCount
 )
