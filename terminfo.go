@@ -25,7 +25,7 @@ var (
 )
 
 // OpenEnv calls Open with the name as $TERM.
-func OpenEnv() (ti *Terminfo, err error) {
+func OpenEnv() (*Terminfo, error) {
 	return Open(os.Getenv("TERM"))
 }
 

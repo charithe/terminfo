@@ -7,18 +7,6 @@ import (
 	"sync"
 )
 
-// parametizer represents the scanners state.
-type parametizer struct {
-	s        string          // terminfo string
-	pos      int             // position in s
-	nest     int             // nesting level of if statements
-	st       stack           // terminfo var stack
-	skipElse bool            // controls which fuction skipText returns
-	buf      *bytes.Buffer   // result buffer
-	params   [9]interface{}  // paramters
-	dvars    [26]interface{} // dynamic vars
-}
-
 // Parm evaluates a terminfo parameterized string, such as cap.SetAForeground,
 // and returns the result.
 func Parm(s string, p ...interface{}) string {
@@ -30,6 +18,18 @@ func Parm(s string, p ...interface{}) string {
 		pz.params[i] = p[i]
 	}
 	return pz.run()
+}
+
+// parametizer represents the scanners state.
+type parametizer struct {
+	s        string          // terminfo string
+	pos      int             // position in s
+	nest     int             // nesting level of if statements
+	st       stack           // terminfo var stack
+	skipElse bool            // controls which fuction skipText returns
+	buf      *bytes.Buffer   // result buffer
+	params   [9]interface{}  // paramters
+	dvars    [26]interface{} // dynamic vars
 }
 
 // static vars

@@ -40,14 +40,14 @@ func (r *reader) slice() []byte {
 	return r.buf[r.ppos:r.pos]
 }
 
-func (r *reader) sliceAdd(i int16) []byte {
-	r.ppos, r.pos = r.pos, r.pos+i
+func (r *reader) sliceOff(off int16) []byte {
+	r.ppos, r.pos = r.pos, r.pos+off
 	return r.slice()
 }
 
-func (r *reader) read(f *os.File) (err error) {
-	if err = r.readHeader(f); err != nil {
-		return
+func (r *reader) read(f *os.File) error {
+	if err := r.readHeader(f); err != nil {
+		return err
 	}
 	r.readNames()
 	r.readBools()
@@ -55,10 +55,10 @@ func (r *reader) read(f *os.File) (err error) {
 	return r.readStrings()
 }
 
-func (r *reader) readHeader(f *os.File) (err error) {
+func (r *reader) readHeader(f *os.File) error {
 	fi, err := f.Stat()
 	if err != nil {
-		return
+		return err
 	}
 	s := fi.Size()
 	if s < int64(len(r.h)) {
@@ -68,7 +68,7 @@ func (r *reader) readHeader(f *os.File) (err error) {
 		r.buf = make([]byte, s)
 	}
 	if _, err = io.ReadFull(f, r.buf); err != nil {
-		return
+		return err
 	}
 	for i := 0; i < len(r.h); i++ {
 		r.h[i] = littleEndian(i*2, r.buf)
@@ -79,7 +79,7 @@ func (r *reader) readHeader(f *os.File) (err error) {
 	if r.h.badMagic() {
 		return ErrBadMagic
 	}
-	return
+	return nil
 }
 
 func (r *reader) readNames() {
@@ -90,7 +90,7 @@ func (r *reader) readNames() {
 }
 
 func (r *reader) readBools() {
-	for i, b := range r.sliceAdd(r.h.lenBools()) {
+	for i, b := range r.sliceOff(r.h.lenBools()) {
 		if b == 1 {
 			r.ti.BoolCaps[i] = true
 		}
@@ -102,7 +102,7 @@ func (r *reader) readBools() {
 }
 
 func (r *reader) readNumbers() {
-	nbuf := r.sliceAdd(r.h.lenNumeric())
+	nbuf := r.sliceOff(r.h.lenNumeric())
 	for j := 0; j < len(nbuf); j += 2 {
 		if n := littleEndian(j, nbuf); n > -1 {
 			r.ti.NumericCaps[j/2] = n
@@ -112,7 +112,7 @@ func (r *reader) readNumbers() {
 
 func (r *reader) readStrings() error {
 	// Read the string and string table section.
-	sbuf := r.sliceAdd(r.h.lenStrings())
+	sbuf := r.sliceOff(r.h.lenStrings())
 	table := r.buf[r.pos : r.pos+r.h.lenTable()]
 	for j := 0; j < len(sbuf); j += 2 {
 		if off := littleEndian(j, sbuf); off > -1 {
