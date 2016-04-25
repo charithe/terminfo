@@ -7,17 +7,53 @@ import (
 	"sync"
 )
 
-// Parm evaluates a terminfo parameterized string, such as cap.SetAForeground,
-// and returns the result.
-func Parm(s string, p ...interface{}) string {
-	pz := getParametizer(s)
-	defer pz.free()
-	// make sure we always have 9 parameters -- makes it easier
-	// later to skip checks and its faster
-	for i := 0; i < len(pz.params) && i < len(p); i++ {
-		pz.params[i] = p[i]
+type stack []interface{}
+
+func (st *stack) push(v interface{}) {
+	*st = append(*st, v)
+}
+
+func (st *stack) pop() (v interface{}) {
+	if len(*st) == 0 {
+		return nil
 	}
-	return pz.run()
+	v = (*st)[len(*st)-1]
+	*st = (*st)[:len(*st)-1]
+	return
+}
+
+func (st *stack) popInt() int {
+	if ai, ok := st.pop().(int); ok {
+		return ai
+	}
+	return 0
+}
+
+func (st *stack) popTwoInt() (bi int, ai int) {
+	bi = st.popInt()
+	ai = st.popInt()
+	return
+}
+
+func (st *stack) popBool() bool {
+	if ab, ok := st.pop().(bool); ok {
+		return ab
+	}
+	return false
+}
+
+func (st *stack) popByte() byte {
+	if ab, ok := st.pop().(byte); ok {
+		return ab
+	}
+	return 0
+}
+
+func (st *stack) popString() string {
+	if as, ok := st.pop().(string); ok {
+		return as
+	}
+	return ""
 }
 
 // parametizer represents the scanners state.
@@ -59,6 +95,19 @@ func (pz *parametizer) free() {
 	pz.params = [9]interface{}{}
 	pz.dvars = [26]interface{}{}
 	parametizerPool.Put(pz)
+}
+
+// Parm evaluates a terminfo parameterized string, such as cap.SetAForeground,
+// and returns the result.
+func Parm(s string, p ...interface{}) string {
+	pz := getParametizer(s)
+	defer pz.free()
+	// make sure we always have 9 parameters -- makes it easier
+	// later to skip checks and its faster
+	for i := 0; i < len(pz.params) && i < len(p); i++ {
+		pz.params[i] = p[i]
+	}
+	return pz.run()
 }
 
 // stateFn represents the state of the scanner as a function that returns the next state.
