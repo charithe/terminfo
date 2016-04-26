@@ -21,6 +21,7 @@ var (
 // header represents a Terminfo file's header.
 type header [6]int16
 
+// TODO: convert back to using methods instead of indices.
 const (
 	magic = iota
 	lenNames
@@ -41,16 +42,17 @@ func (h header) len() int16 {
 }
 
 // littleEndian decodes a int16 starting at i in buf using little-endian byte order.
-func littleEndian(i int, buf []byte) int16 {
+func littleEndian(i int16, buf []byte) int16 {
 	return int16(buf[i+1])<<8 | int16(buf[i])
 }
 
-// TODO still need to work on extended reader.
 type reader struct {
 	pos, ppos int16
 	buf       []byte
 	ti        *Terminfo
-	h         header
+	// TODO: use pointers here or nah?
+	h  header
+	eh extHeader
 }
 
 var readerPool = sync.Pool{
@@ -62,12 +64,6 @@ var readerPool = sync.Pool{
 	},
 }
 
-func (r *reader) free() {
-	r.pos, r.ppos = 0, 0
-	r.h = header{}
-	readerPool.Put(r)
-}
-
 func (r *reader) slice() []byte {
 	return r.buf[r.ppos:r.pos]
 }
@@ -75,6 +71,13 @@ func (r *reader) slice() []byte {
 func (r *reader) sliceOff(off int16) []byte {
 	r.ppos, r.pos = r.pos, r.pos+off
 	return r.slice()
+}
+
+func (r *reader) evenBoundary() {
+	if r.pos%2 == 1 {
+		// Skip extra null byte inserted to align everything on word boundaries.
+		r.pos++
+	}
 }
 
 // TODO read ncurses and find more sanity checks
@@ -100,19 +103,55 @@ func (r *reader) read(f *os.File) (err error) {
 	if s < hl {
 		return ErrSmallFile
 	}
-	r.readNames()
+	r.ti = new(Terminfo)
+	r.ti.Names = strings.Split(string(r.sliceOff(r.h[lenNames])), "|")
 	r.readBools()
+	r.evenBoundary()
 	r.readNumbers()
-	if err = r.readStrings(); err != nil {
+	if err = r.readStrings(); err != nil || s <= hl {
 		return
 	}
-	if s > hl {
-		if hl%2 == 1 {
-			r.pos++
+	// Extended reader
+	r.evenBoundary()
+	if err = r.readExtHeader(); err != nil {
+		return
+	}
+	// Read the string names, and then read the caps, much more efficient.
+	return
+}
+
+type extHeader [5]int16
+
+func (eh extHeader) len() int16 {
+	return int16(len(eh) * 2)
+}
+
+const (
+	lenExtBools = iota
+	lenExtNumbers
+	lenExtStrings
+	lenExtTable
+	lasExttOff
+)
+
+func (r *reader) readExtHeader() error {
+	hbuf := r.sliceOff(r.eh.len())
+	for i := 0; i < len(r.eh); i++ {
+		n := littleEndian(int16(i*2), hbuf)
+		if n < 0 {
+			return ErrBadHeader
 		}
-		log.Println("extended")
+		r.eh[i] = n
 	}
 	return nil
+}
+
+func (r *reader) readExtBools() {
+	for i, b := range r.sliceOff(r.eh[lenExtBools]) {
+		if b == 1 {
+			r.ti.Bools[i] = true
+		}
+	}
 }
 
 func (r *reader) readHeader() error {
@@ -120,22 +159,14 @@ func (r *reader) readHeader() error {
 	if r.h[magic] != 0x11A {
 		return ErrBadHeader
 	}
-	for i := 1; i < len(r.h); i++ {
-		j := littleEndian(i*2, r.buf)
-		if j < 0 {
+	for r.pos = 2; r.pos < r.h.len(); r.pos += 2 {
+		n := littleEndian(r.pos, r.buf)
+		if n < 0 {
 			return ErrBadHeader
 		}
-		r.h[i] = j
+		r.h[r.pos/2] = n
 	}
 	return nil
-}
-
-func (r *reader) readNames() {
-	r.ppos = r.h.len()
-	r.pos = r.ppos + r.h[lenNames]
-	r.ti = new(Terminfo)
-	// The string is null terminated but, go handles it fine.
-	r.ti.Names = strings.Split(string(r.slice()), "|")
 }
 
 func (r *reader) readBools() {
@@ -147,20 +178,17 @@ func (r *reader) readBools() {
 			r.ti.Bools[i] = true
 		}
 	}
-	if (r.h[lenNames]+r.h[lenBools])%2 == 1 {
-		// Skip extra null byte inserted to align everything on word boundaries.
-		r.pos++
-	}
 }
 
 func (r *reader) readNumbers() {
 	if r.h[lenNumbers] >= caps.NumberCount {
 		r.h[lenNumbers] = caps.NumberCount
 	}
+	// TODO: is slice really necessary or good?
 	nbuf := r.sliceOff(r.h[lenNumbers] * 2)
-	for j := 0; j < len(nbuf); j += 2 {
-		if n := littleEndian(j, nbuf); n > -1 {
-			r.ti.Numbers[j/2] = n
+	for i := int16(0); i < r.h[lenNumbers]; i++ {
+		if n := littleEndian(i*2, nbuf); n > -1 {
+			r.ti.Numbers[i] = n
 		}
 	}
 }
@@ -172,19 +200,19 @@ func (r *reader) readStrings() error {
 	}
 	sbuf := r.sliceOff(r.h[lenStrings] * 2)
 	table := r.sliceOff(r.h[lenTable])
-	for j := 0; j < len(sbuf); j += 2 {
-		if off := littleEndian(j, sbuf); off > -1 {
-			x := int(off)
+	for i := int16(0); i < r.h[lenStrings]; i++ {
+		if off := littleEndian(i*2, sbuf); off > -1 {
+			j := int(off)
 			for {
-				if x >= len(table) {
+				if j >= len(table) {
 					return ErrBadString
 				}
-				if table[x] == 0 {
+				if table[j] == 0 {
 					break
 				}
-				x++
+				j++
 			}
-			r.ti.Strings[j/2] = string(table[off:x])
+			r.ti.Strings[i] = string(table[off:j])
 		}
 	}
 	return nil

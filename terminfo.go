@@ -81,7 +81,7 @@ func openDir(dir, name string) (*Terminfo, error) {
 		}
 	}
 	r := readerPool.Get().(*reader)
-	defer r.free()
+	defer readerPool.Put(r)
 	if err = r.read(f); err != nil {
 		return nil, err
 	}
@@ -96,6 +96,14 @@ func openDir(dir, name string) (*Terminfo, error) {
 
 func (ti *Terminfo) Color(fg, bg int) (rv string) {
 	maxColors := int(ti.Numbers[caps.MaxColors])
+	if maxColors == 8 {
+		if fg > 7 && fg < 16 {
+			fg -= 8
+		}
+		if bg > 7 && bg < 16 {
+			bg -= 8
+		}
+	}
 	if maxColors > fg && fg >= 0 {
 		rv += Parm(ti.Strings[caps.SetAForeground], fg)
 	}
