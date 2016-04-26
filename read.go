@@ -3,6 +3,7 @@ package terminfo
 import (
 	"errors"
 	"io"
+	"log"
 	"os"
 	"strings"
 	"sync"
@@ -20,13 +21,21 @@ var (
 // header represents a Terminfo file's header.
 type header [5]int16
 
-// TODO: convert back to using methods instead of indices.
+// No need to store magic.
 const (
 	lenNames = iota
 	lenBools
 	lenNumbers
 	lenStrings
 	lenTable
+)
+
+const (
+	lenExtBools = iota
+	lenExtNumbers
+	lenExtStrings
+	lenExtTable
+	lastOff
 )
 
 // lenFile returns the length of the file the header describes in bytes.
@@ -49,8 +58,7 @@ type reader struct {
 	buf []byte
 	ti  *Terminfo
 	// TODO: use pointers here or nah?
-	h  header
-	eh extHeader
+	h header
 }
 
 var readerPool = sync.Pool{
@@ -91,10 +99,14 @@ func (r *reader) read(f *os.File) (err error) {
 	if _, err = io.ReadAtLeast(f, r.buf, s); err != nil {
 		return
 	}
+	if littleEndian(0, r.buf) != 0x11A {
+		return ErrBadHeader
+	}
+	r.pos = 2 // skip magic
 	if err = r.readHeader(); err != nil {
 		return
 	}
-	hl := int(r.h.lenFile())
+	hl := int(r.h.lenFile()) + 2 // 2 more for magic
 	if s < hl {
 		return ErrSmallFile
 	}
@@ -106,55 +118,17 @@ func (r *reader) read(f *os.File) (err error) {
 	if err = r.readStrings(); err != nil || s <= hl {
 		return
 	}
-	// Extended reader
+	// Extended reader.
 	r.evenBoundary()
-	if err = r.readExtHeader(); err != nil {
+	if err = r.readHeader(); err != nil {
 		return
 	}
+	log.Println(s, int16(hl)+r.h.lenFile())
 	// Read the string names, and then read the caps, much more efficient.
 	return
 }
 
-// TODO extHeader is same as header with different index constants.
-type extHeader [5]int16
-
-func (eh extHeader) len() int16 {
-	return int16(len(eh) * 2)
-}
-
-const (
-	lenExtBools = iota
-	lenExtNumbers
-	lenExtStrings
-	lenExtTable
-	lasExttOff
-)
-
-func (r *reader) readExtHeader() error {
-	hbuf := r.sliceOff(r.eh.len())
-	for i := 0; i < len(r.eh); i++ {
-		n := littleEndian(int16(i*2), hbuf)
-		if n < 0 {
-			return ErrBadHeader
-		}
-		r.eh[i] = n
-	}
-	return nil
-}
-
-func (r *reader) readExtBools() {
-	for i, b := range r.sliceOff(r.eh[lenExtBools]) {
-		if b == 1 {
-			r.ti.Bools[i] = true
-		}
-	}
-}
-
 func (r *reader) readHeader() error {
-	if littleEndian(0, r.buf) != 0x11A {
-		return ErrBadHeader
-	}
-	r.pos = 2 // skip magic
 	hbuf := r.sliceOff(r.h.len())
 	for i := 0; i < len(r.h); i++ {
 		n := littleEndian(int16(i*2), hbuf)
