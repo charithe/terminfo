@@ -1,7 +1,6 @@
 package terminfo
 
 import (
-	"bytes"
 	"errors"
 	"io"
 	"log"
@@ -127,14 +126,14 @@ func (r *reader) read(f *os.File) (err error) {
 	if err = r.readStrings(); err != nil || s <= hl {
 		return
 	}
-	// Extended reading
+	// log.Printf("% x\n\n", r.buf[:r.pos])
+	// log.Printf("% x\n\n", r.buf[r.pos:])
+	// return
 	r.evenBoundary(r.pos)
 	if err = r.readHeader(); err != nil {
 		return
 	}
 	log.Println(r.h)
-	// IGNORE THE REST
-	return
 	r.ti.ExtBools = make(map[string]bool)
 	for i, b := range r.sliceOff(r.h[lenExtBools]) {
 		if b == 1 {
@@ -149,10 +148,10 @@ func (r *reader) read(f *os.File) (err error) {
 		}
 	}
 	sbuf := r.sliceOff(r.h[lenExtStrings] * 2)
-	log.Printf("%q\n\n", sbuf)
+	log.Printf("% x\n\n", sbuf)
+	r.pos += 116
 	table := r.sliceOff(r.h[lenExtTable] + r.h[lastOff])
 	log.Printf("%q\n\n", table)
-	log.Println(bytes.Count(table, []byte{0}))
 	for i := int16(0); i < r.h[lenExtStrings]; i++ {
 		if off := littleEndian(i*2, sbuf); off > -1 {
 			j := off
@@ -165,6 +164,7 @@ func (r *reader) read(f *os.File) (err error) {
 				}
 				j++
 			}
+			log.Println(off, j)
 			log.Printf("%q", string(table[off:j]))
 		}
 	}
