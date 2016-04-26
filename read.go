@@ -3,7 +3,6 @@ package terminfo
 import (
 	"errors"
 	"io"
-	"log"
 	"os"
 	"strings"
 	"sync"
@@ -19,12 +18,11 @@ var (
 )
 
 // header represents a Terminfo file's header.
-type header [6]int16
+type header [5]int16
 
 // TODO: convert back to using methods instead of indices.
 const (
-	magic = iota
-	lenNames
+	lenNames = iota
 	lenBools
 	lenNumbers
 	lenStrings
@@ -47,9 +45,9 @@ func littleEndian(i int16, buf []byte) int16 {
 }
 
 type reader struct {
-	pos, ppos int16
-	buf       []byte
-	ti        *Terminfo
+	pos int16
+	buf []byte
+	ti  *Terminfo
 	// TODO: use pointers here or nah?
 	h  header
 	eh extHeader
@@ -64,13 +62,10 @@ var readerPool = sync.Pool{
 	},
 }
 
-func (r *reader) slice() []byte {
-	return r.buf[r.ppos:r.pos]
-}
-
 func (r *reader) sliceOff(off int16) []byte {
-	r.ppos, r.pos = r.pos, r.pos+off
-	return r.slice()
+	// Just use off as ppos.
+	off, r.pos = r.pos, r.pos+off
+	return r.buf[off:r.pos]
 }
 
 func (r *reader) evenBoundary() {
@@ -120,6 +115,7 @@ func (r *reader) read(f *os.File) (err error) {
 	return
 }
 
+// TODO extHeader is same as header with different index constants.
 type extHeader [5]int16
 
 func (eh extHeader) len() int16 {
@@ -155,16 +151,17 @@ func (r *reader) readExtBools() {
 }
 
 func (r *reader) readHeader() error {
-	r.h[magic] = littleEndian(magic, r.buf)
-	if r.h[magic] != 0x11A {
+	if littleEndian(0, r.buf) != 0x11A {
 		return ErrBadHeader
 	}
-	for r.pos = 2; r.pos < r.h.len(); r.pos += 2 {
-		n := littleEndian(r.pos, r.buf)
+	r.pos = 2 // skip magic
+	hbuf := r.sliceOff(r.h.len())
+	for i := 0; i < len(r.h); i++ {
+		n := littleEndian(int16(i*2), hbuf)
 		if n < 0 {
 			return ErrBadHeader
 		}
-		r.h[r.pos/2] = n
+		r.h[i] = n
 	}
 	return nil
 }
@@ -184,7 +181,6 @@ func (r *reader) readNumbers() {
 	if r.h[lenNumbers] >= caps.NumberCount {
 		r.h[lenNumbers] = caps.NumberCount
 	}
-	// TODO: is slice really necessary or good?
 	nbuf := r.sliceOff(r.h[lenNumbers] * 2)
 	for i := int16(0); i < r.h[lenNumbers]; i++ {
 		if n := littleEndian(i*2, nbuf); n > -1 {
@@ -202,9 +198,9 @@ func (r *reader) readStrings() error {
 	table := r.sliceOff(r.h[lenTable])
 	for i := int16(0); i < r.h[lenStrings]; i++ {
 		if off := littleEndian(i*2, sbuf); off > -1 {
-			j := int(off)
+			j := off
 			for {
-				if j >= len(table) {
+				if j >= r.h[lenTable] {
 					return ErrBadString
 				}
 				if table[j] == 0 {
