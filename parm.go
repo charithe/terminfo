@@ -288,28 +288,24 @@ func getDSVar(pz *parametizer) stateFn {
 }
 
 func pushInt(pz *parametizer) stateFn {
-	ch, err := pz.get()
-	if err != nil {
-		return nil
-	}
 	var ai int
-	for ch >= '0' && ch <= '9' {
-		ai = (ai * 10) + int(ch-'0')
-		pz.pos++
-		ch, err = pz.get()
+	for {
+		ch, err := pz.get()
 		if err != nil {
 			return nil
 		}
+		pz.pos++
+		if ch < '0' || ch > '9' {
+			pz.st.push(ai)
+			return scanText
+		}
+		ai = (ai * 10) + int(ch-'0')
 	}
-	pz.st.push(ai)
-	pz.pos++
-	return scanText
 }
 
 func scanThen(pz *parametizer) stateFn {
-	ab := pz.st.popBool()
 	pz.pos++
-	if ab {
+	if pz.st.popBool() {
 		return scanText
 	}
 	pz.skipElse = false
@@ -317,14 +313,14 @@ func scanThen(pz *parametizer) stateFn {
 }
 
 func skipText(pz *parametizer) stateFn {
-	ch, err := pz.get()
-	if err != nil {
-		return nil
-	}
-	for pz.pos++; ch != '%'; pz.pos++ {
-		ch, err = pz.get()
+	for {
+		ch, err := pz.get()
 		if err != nil {
 			return nil
+		}
+		pz.pos++
+		if ch == '%' {
+			break
 		}
 	}
 	if pz.skipElse {
