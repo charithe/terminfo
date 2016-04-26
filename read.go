@@ -1,10 +1,12 @@
 package terminfo
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -40,7 +42,11 @@ const (
 
 // lenFile returns the length of the file the header describes in bytes.
 func (h header) lenFile() int16 {
-	return h.len() + h[lenNames] + h[lenBools] + h[lenNumbers]*2 + h[lenStrings]*2 + h[lenTable]
+	return 2 + h.len() + h[lenNames] + h[lenBools] + h[lenNumbers]*2 + h[lenStrings]*2 + h[lenTable]
+}
+
+func (h header) lenExt() int16 {
+	return h[lenExtBools] + h[lenExtNumbers]*2 + h[lenExtStrings]*2 + h[lenExtTable]
 }
 
 // len returns the length of the header in bytes.
@@ -76,8 +82,8 @@ func (r *reader) sliceOff(off int16) []byte {
 	return r.buf[off:r.pos]
 }
 
-func (r *reader) evenBoundary() {
-	if r.pos%2 == 1 {
+func (r *reader) evenBoundary(i int16) {
+	if i%2 == 1 {
 		// Skip extra null byte inserted to align everything on word boundaries.
 		r.pos++
 	}
@@ -85,6 +91,7 @@ func (r *reader) evenBoundary() {
 
 // TODO read ncurses and find more sanity checks
 func (r *reader) read(f *os.File) (err error) {
+	log.SetFlags(0)
 	fi, err := f.Stat()
 	if err != nil {
 		return
@@ -93,8 +100,10 @@ func (r *reader) read(f *os.File) (err error) {
 	if s < len(r.h) {
 		return ErrSmallFile
 	}
-	if s > len(r.buf) {
-		r.buf = make([]byte, s*2+1)
+	if s > cap(r.buf) {
+		r.buf = make([]byte, s, s*2+1)
+	} else {
+		r.buf = r.buf[:s]
 	}
 	if _, err = io.ReadAtLeast(f, r.buf, s); err != nil {
 		return
@@ -106,25 +115,59 @@ func (r *reader) read(f *os.File) (err error) {
 	if err = r.readHeader(); err != nil {
 		return
 	}
-	hl := int(r.h.lenFile()) + 2 // 2 more for magic
+	hl := int(r.h.lenFile())
 	if s < hl {
 		return ErrSmallFile
 	}
 	r.ti = new(Terminfo)
 	r.ti.Names = strings.Split(string(r.sliceOff(r.h[lenNames])), "|")
 	r.readBools()
-	r.evenBoundary()
+	r.evenBoundary(r.pos)
 	r.readNumbers()
 	if err = r.readStrings(); err != nil || s <= hl {
 		return
 	}
-	// Extended reader.
-	r.evenBoundary()
+	// Extended reading
+	r.evenBoundary(r.pos)
 	if err = r.readHeader(); err != nil {
 		return
 	}
-	log.Println(s, int16(hl)+r.h.lenFile())
-	// Read the string names, and then read the caps, much more efficient.
+	log.Println(r.h)
+	// IGNORE THE REST
+	return
+	r.ti.ExtBools = make(map[string]bool)
+	for i, b := range r.sliceOff(r.h[lenExtBools]) {
+		if b == 1 {
+			r.ti.ExtBools[strconv.Itoa(i)] = true
+		}
+	}
+	r.evenBoundary(r.h[lenExtBools])
+	nbuf := r.sliceOff(r.h[lenExtNumbers] * 2)
+	for i := int16(0); i < r.h[lenExtNumbers]; i++ {
+		if n := littleEndian(i*2, nbuf); n > -1 {
+			r.ti.ExtNumbers[strconv.Itoa(int(i))] = n
+		}
+	}
+	sbuf := r.sliceOff(r.h[lenExtStrings] * 2)
+	log.Printf("%q\n\n", sbuf)
+	table := r.sliceOff(r.h[lenExtTable] + r.h[lastOff])
+	log.Printf("%q\n\n", table)
+	log.Println(bytes.Count(table, []byte{0}))
+	for i := int16(0); i < r.h[lenExtStrings]; i++ {
+		if off := littleEndian(i*2, sbuf); off > -1 {
+			j := off
+			for {
+				if j >= r.h[lenExtTable]+r.h[lastOff] {
+					return ErrBadString
+				}
+				if table[j] == 0 {
+					break
+				}
+				j++
+			}
+			log.Printf("%q", string(table[off:j]))
+		}
+	}
 	return
 }
 
