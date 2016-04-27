@@ -81,13 +81,6 @@ func (r *reader) sliceOff(off int16) []byte {
 	return r.buf[off:r.pos]
 }
 
-func (r *reader) evenBoundary(i int16) {
-	if i%2 == 1 {
-		// Skip extra null byte inserted to align everything on word boundaries.
-		r.pos++
-	}
-}
-
 // TODO read ncurses and find more sanity checks
 func (r *reader) read(f *os.File) (err error) {
 	log.SetFlags(0)
@@ -121,15 +114,20 @@ func (r *reader) read(f *os.File) (err error) {
 	r.ti = new(Terminfo)
 	r.ti.Names = strings.Split(string(r.sliceOff(r.h[lenNames])), "|")
 	r.readBools()
-	r.evenBoundary(r.pos)
+	if r.pos%2 == 1 {
+		// Skip extra null byte inserted to align everything on word boundaries.
+		r.pos++
+		hl++
+	}
 	r.readNumbers()
 	if err = r.readStrings(); err != nil || s <= hl {
 		return
 	}
-	// log.Printf("% x\n\n", r.buf[:r.pos])
-	// log.Printf("% x\n\n", r.buf[r.pos:])
-	// return
-	r.evenBoundary(r.pos)
+	if r.pos%2 == 1 {
+		// Skip extra null byte inserted to align everything on word boundaries.
+		r.pos++
+		hl++
+	}
 	if err = r.readHeader(); err != nil {
 		return
 	}
@@ -140,17 +138,22 @@ func (r *reader) read(f *os.File) (err error) {
 			r.ti.ExtBools[strconv.Itoa(i)] = true
 		}
 	}
-	r.evenBoundary(r.h[lenExtBools])
+	if r.h[lenExtBools]%2 == 1 {
+		// Skip extra null byte inserted to align everything on word boundaries.
+		r.pos++
+		hl++
+	}
 	nbuf := r.sliceOff(r.h[lenExtNumbers] * 2)
 	for i := int16(0); i < r.h[lenExtNumbers]; i++ {
 		if n := littleEndian(i*2, nbuf); n > -1 {
 			r.ti.ExtNumbers[strconv.Itoa(int(i))] = n
 		}
 	}
-	sbuf := r.sliceOff(r.h[lenExtStrings] * 2)
-	log.Printf("% x\n\n", sbuf)
-	r.pos += 116
-	table := r.sliceOff(r.h[lenExtTable] + r.h[lastOff])
+	log.Println(int(r.pos) - hl)
+	sbuf := r.sliceOff(r.h[lenExtTable] * 2)
+	log.Println(int(r.pos) - hl)
+	table := r.sliceOff(r.h[lastOff])
+	// log.Printf("%q\n\n", sbuf)
 	log.Printf("%q\n\n", table)
 	for i := int16(0); i < r.h[lenExtStrings]; i++ {
 		if off := littleEndian(i*2, sbuf); off > -1 {
