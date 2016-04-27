@@ -35,17 +35,29 @@ const (
 	lenExtBools = iota
 	lenExtNumbers
 	lenExtStrings
+	lenExtOff
 	lenExtTable
-	lastOff
 )
 
 // lenFile returns the length of the file the header describes in bytes.
 func (h header) lenFile() int16 {
-	return 2 + h.len() + h[lenNames] + h[lenBools] + h[lenNumbers]*2 + h[lenStrings]*2 + h[lenTable]
+	return 2 + // 2 for magic
+		h.len() +
+		h[lenNames] +
+		h[lenBools] +
+		(h[lenBools]+h[lenNames])%2 +
+		h[lenNumbers]*2 +
+		h[lenStrings]*2 +
+		h[lenTable]
 }
 
 func (h header) lenExt() int16 {
-	return h[lenExtBools] + h[lenExtNumbers]*2 + h[lenExtStrings]*2 + h[lenExtTable]
+	return h.len() +
+		h[lenExtBools] +
+		h[lenExtBools]%2 +
+		h[lenExtNumbers]*2 +
+		h[lenExtOff]*2 +
+		h[lenExtTable]
 }
 
 // len returns the length of the header in bytes.
@@ -81,6 +93,13 @@ func (r *reader) sliceOff(off int16) []byte {
 	return r.buf[off:r.pos]
 }
 
+func (r *reader) evenBoundary(i int16) {
+	if i%2 == 1 {
+		// Skip extra null byte inserted to align everything on word boundaries.
+		r.pos++
+	}
+}
+
 // TODO read ncurses and find more sanity checks
 func (r *reader) read(f *os.File) (err error) {
 	log.SetFlags(0)
@@ -88,16 +107,16 @@ func (r *reader) read(f *os.File) (err error) {
 	if err != nil {
 		return
 	}
-	s := int(fi.Size())
-	if s < len(r.h) {
+	s := int16(fi.Size())
+	if s < r.h.len() {
 		return ErrSmallFile
 	}
-	if s > cap(r.buf) {
+	if s > int16(cap(r.buf)) {
 		r.buf = make([]byte, s, s*2+1)
 	} else {
 		r.buf = r.buf[:s]
 	}
-	if _, err = io.ReadAtLeast(f, r.buf, s); err != nil {
+	if _, err = io.ReadAtLeast(f, r.buf, int(s)); err != nil {
 		return
 	}
 	if littleEndian(0, r.buf) != 0x11A {
@@ -107,60 +126,52 @@ func (r *reader) read(f *os.File) (err error) {
 	if err = r.readHeader(); err != nil {
 		return
 	}
-	hl := int(r.h.lenFile())
+	hl := r.h.lenFile()
 	if s < hl {
 		return ErrSmallFile
 	}
 	r.ti = new(Terminfo)
 	r.ti.Names = strings.Split(string(r.sliceOff(r.h[lenNames])), "|")
 	r.readBools()
-	if r.pos%2 == 1 {
-		// Skip extra null byte inserted to align everything on word boundaries.
-		r.pos++
-		hl++
-	}
+	r.evenBoundary(r.pos)
 	r.readNumbers()
 	if err = r.readStrings(); err != nil || s <= hl {
 		return
 	}
-	// HERE TO END IS THE EXTENDED READER
-	if r.pos%2 == 1 {
-		// Skip extra null byte inserted to align everything on word boundaries.
-		r.pos++
-		hl++
+	// We have extended capabilities.
+	r.evenBoundary(r.pos)
+	s -= r.pos
+	if s < r.h.len() {
+		return ErrSmallFile
 	}
 	if err = r.readHeader(); err != nil {
 		return
 	}
-	log.Println(r.h)
+	if s < r.h.lenExt() {
+		return ErrSmallFile
+	}
 	r.ti.ExtBools = make(map[string]bool)
 	for i, b := range r.sliceOff(r.h[lenExtBools]) {
 		if b == 1 {
 			r.ti.ExtBools[strconv.Itoa(i)] = true
 		}
 	}
-	if r.h[lenExtBools]%2 == 1 {
-		// Skip extra null byte inserted to align everything on word boundaries.
-		r.pos++
-		hl++
-	}
+	r.evenBoundary(r.h[lenExtBools])
 	nbuf := r.sliceOff(r.h[lenExtNumbers] * 2)
 	for i := int16(0); i < r.h[lenExtNumbers]; i++ {
 		if n := littleEndian(i*2, nbuf); n > -1 {
 			r.ti.ExtNumbers[strconv.Itoa(int(i))] = n
 		}
 	}
-	log.Println(int(r.pos) - hl)
-	sbuf := r.sliceOff(r.h[lenExtTable] * 2)
-	log.Println(int(r.pos) - hl)
-	table := r.sliceOff(r.h[lastOff])
-	// log.Printf("%q\n\n", sbuf)
-	log.Printf("%q\n\n", table)
+	sbuf := r.sliceOff(r.h[lenExtStrings] * 2)
+	// Skip the rest.
+	r.pos += r.h[lenExtOff]*2 - r.h[lenExtStrings]*2
+	table := r.sliceOff(r.h[lenTable])
 	for i := int16(0); i < r.h[lenExtStrings]; i++ {
 		if off := littleEndian(i*2, sbuf); off > -1 {
 			j := off
 			for {
-				if j >= r.h[lenExtTable]+r.h[lastOff] {
+				if j >= r.h[lenTable] {
 					return ErrBadString
 				}
 				if table[j] == 0 {

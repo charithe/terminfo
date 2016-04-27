@@ -19,6 +19,8 @@ func TestOpen(t *testing.T) {
 	t.Log(ti.Numbers[caps.MaxColors])
 	t.Logf("%q", ti.Strings[caps.SetAForeground])
 	t.Logf("%q", ti.Color(9, -1))
+	tic, err := tcell.LookupTerminfo(os.Getenv("TERM"))
+	t.Logf("%q", tic.TColor(9, -1))
 }
 
 var result interface{}

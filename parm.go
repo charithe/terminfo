@@ -183,6 +183,8 @@ func scanCode(pz *parametizer) stateFn {
 			return nil
 		}
 		pz.st.push(ch)
+		// skip the '\''
+		pz.pos++
 	case '{':
 		pz.pos++
 		return pushInt
@@ -255,6 +257,7 @@ func pushParam(pz *parametizer) stateFn {
 	} else {
 		pz.st.push(0)
 	}
+	// skip the '}'
 	pz.pos++
 	return scanText
 }
