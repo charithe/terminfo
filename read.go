@@ -164,8 +164,10 @@ func (r *reader) read(f *os.File) (err error) {
 		}
 	}
 	sbuf := r.sliceOff(r.h[lenExtStrings] * 2)
-	// Skip the rest.
+
+	// No idea what these extra bytes are for, but skip them.
 	r.pos += r.h[lenExtOff]*2 - r.h[lenExtStrings]*2
+
 	table := r.sliceOff(r.h[lenTable])
 	for i := int16(0); i < r.h[lenExtStrings]; i++ {
 		if off := littleEndian(i*2, sbuf); off > -1 {
