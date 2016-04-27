@@ -5,7 +5,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -36,7 +35,6 @@ const (
 	lenExtNumbers
 	lenExtStrings
 	lenExtOff
-	lenExtTable
 )
 
 // lenFile returns the length of the file the header describes in bytes.
@@ -57,7 +55,7 @@ func (h header) lenExt() int16 {
 		h[lenExtBools]%2 +
 		h[lenExtNumbers]*2 +
 		h[lenExtOff]*2 +
-		h[lenExtTable]
+		h[lenTable]
 }
 
 // len returns the length of the header in bytes.
@@ -74,8 +72,13 @@ type reader struct {
 	pos int16
 	buf []byte
 	ti  *Terminfo
-	// TODO: use pointers here or nah?
-	h header
+	// TODO: use pointer here or nah?
+	h          header
+	epos       int16
+	extBools   []bool
+	extNumbers []int16
+	extStrings []string
+	extNames   []string
 }
 
 var readerPool = sync.Pool{
@@ -144,35 +147,54 @@ func (r *reader) read(f *os.File) (err error) {
 	if s < r.h.len() {
 		return ErrSmallFile
 	}
+	log.Println(r.pos)
 	if err = r.readHeader(); err != nil {
 		return
 	}
+	log.Println(r.h)
 	if s < r.h.lenExt() {
 		return ErrSmallFile
 	}
-	r.ti.ExtBools = make(map[string]bool)
-	for i, b := range r.sliceOff(r.h[lenExtBools]) {
-		if b == 1 {
-			r.ti.ExtBools[strconv.Itoa(i)] = true
-		}
-	}
+	r.readExtBools()
 	r.evenBoundary(r.h[lenExtBools])
-	nbuf := r.sliceOff(r.h[lenExtNumbers] * 2)
-	for i := int16(0); i < r.h[lenExtNumbers]; i++ {
-		if n := littleEndian(i*2, nbuf); n > -1 {
-			r.ti.ExtNumbers[strconv.Itoa(int(i))] = n
-		}
+	r.readExtNumbers()
+	if err = r.readExtStringsAndNames(); err != nil {
+		return
 	}
-	sbuf := r.sliceOff(r.h[lenExtStrings] * 2)
+	r.mapExtNames()
+	return nil
+}
 
-	// No idea what these extra bytes are for, but skip them.
-	r.pos += r.h[lenExtOff]*2 - r.h[lenExtStrings]*2
+func (r *reader) mapExtNames() {
+	var i int
+	r.ti.ExtBools = make(map[string]bool)
+	for j := int16(0); j < r.h[lenExtBools]; j++ {
+		r.ti.ExtBools[r.extNames[i]] = r.extBools[j]
+		i++
+	}
+	log.Printf("%q\n\n", r.ti.ExtBools)
+	r.ti.ExtNumbers = make(map[string]int16)
+	for j := int16(0); j < r.h[lenExtNumbers]; j++ {
+		r.ti.ExtNumbers[r.extNames[i]] = r.extNumbers[j]
+		i++
+	}
+	log.Printf("%q\n\n", r.ti.ExtNumbers)
+	r.ti.ExtStrings = make(map[string]string)
+	for j := int16(0); j < r.h[lenExtStrings]; j++ {
+		r.ti.ExtStrings[r.extNames[i]] = r.extStrings[j]
+		i++
+	}
+	log.Printf("%q\n\n", r.ti.ExtStrings)
+}
 
+func (r *reader) readExtStringsAndNames() error {
+	sbuf := r.sliceOff(r.h[lenExtOff] * 2)
 	table := r.sliceOff(r.h[lenTable])
+	r.extStrings = make([]string, r.h[lenExtStrings])
+	var j int16
 	for i := int16(0); i < r.h[lenExtStrings]; i++ {
 		if off := littleEndian(i*2, sbuf); off > -1 {
-			j := off
-			for {
+			for j = off; ; {
 				if j >= r.h[lenTable] {
 					return ErrBadString
 				}
@@ -181,11 +203,48 @@ func (r *reader) read(f *os.File) (err error) {
 				}
 				j++
 			}
-			log.Println(off, j)
-			log.Printf("%q", string(table[off:j]))
+			r.extStrings[i] = string(table[off:j])
 		}
 	}
-	return
+	table = table[j+1:]
+	r.extNames = make([]string, r.h[lenExtOff]-r.h[lenExtStrings])
+	for i := r.h[lenExtStrings]; i < r.h[lenExtOff]; i++ {
+		if off := littleEndian(i*2, sbuf); off > -1 {
+			for j = off; ; {
+				if j >= r.h[lenTable] {
+					return ErrBadString
+				}
+				if table[j] == 0 {
+					break
+				}
+				j++
+			}
+			r.extNames[i-r.h[lenExtStrings]] = string(table[off:j])
+		}
+	}
+	log.Printf("%q\n\n", r.extNames)
+	return nil
+}
+
+func (r *reader) readExtBools() {
+	r.extBools = make([]bool, r.h[lenExtBools])
+	for i, b := range r.sliceOff(r.h[lenExtBools]) {
+		if b == 1 {
+			r.extBools[i] = true
+		}
+	}
+	log.Println(r.extBools)
+}
+
+func (r *reader) readExtNumbers() {
+	nbuf := r.sliceOff(r.h[lenExtNumbers] * 2)
+	r.extNumbers = make([]int16, r.h[lenExtNumbers])
+	for i := int16(0); i < r.h[lenExtNumbers]; i++ {
+		if n := littleEndian(i*2, nbuf); n > -1 {
+			r.extNumbers[i] = n
+		}
+	}
+	log.Println(r.extNumbers)
 }
 
 func (r *reader) readHeader() error {
