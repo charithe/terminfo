@@ -123,6 +123,7 @@ func (r *reader) read(f *os.File) (err error) {
 	if err = r.readStrings(); err != nil || s <= hl {
 		return
 	}
+	// HERE TO END IS THE EXTENDED READER
 	if r.pos%2 == 1 {
 		// Skip extra null byte inserted to align everything on word boundaries.
 		r.pos++
