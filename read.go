@@ -74,7 +74,7 @@ type reader struct {
 	ti  *Terminfo
 	// TODO: use pointer here or nah?
 	h          header
-	epos       int16
+	noff       int16
 	extBools   []bool
 	extNumbers []int16
 	extStrings []string
@@ -105,7 +105,6 @@ func (r *reader) evenBoundary(i int16) {
 
 // TODO read ncurses and find more sanity checks
 func (r *reader) read(f *os.File) (err error) {
-	log.SetFlags(0)
 	fi, err := f.Stat()
 	if err != nil {
 		return
@@ -147,14 +146,14 @@ func (r *reader) read(f *os.File) (err error) {
 	if s < r.h.len() {
 		return ErrSmallFile
 	}
-	log.Println(r.pos)
 	if err = r.readHeader(); err != nil {
 		return
 	}
-	log.Println(r.h)
 	if s < r.h.lenExt() {
 		return ErrSmallFile
 	}
+	r.readExtNames()
+	return
 	r.readExtBools()
 	r.evenBoundary(r.h[lenExtBools])
 	r.readExtNumbers()
@@ -165,6 +164,53 @@ func (r *reader) read(f *os.File) (err error) {
 	return nil
 }
 
+func (r *reader) readExtNames() error {
+	r.noff = r.pos + r.h[lenExtBools] +
+		r.h[lenExtBools]%2 +
+		r.h[lenExtNumbers]*2 +
+		r.h[lenExtStrings]*2
+	// name offsets
+	log.Printf("%q\n\n", r.buf[r.noff:r.noff+(r.h[lenExtOff]-r.h[lenExtStrings])*2])
+	// offset for the string offsets
+	soff := r.pos / 2
+	tableOff := r.pos + r.h[lenExtBools] + r.h[lenExtBools]%2 + r.h[lenExtNumbers]*2 + r.h[lenExtOff]*2
+	table := r.buf[tableOff:]
+	var off, i int16
+	for i = r.h[lenExtStrings] + soff; i > soff; i-- {
+		if off = littleEndian(i*2, r.buf); off > -1 {
+			break
+		}
+	}
+	j := off
+	var val string
+	for {
+		// TODO fix len table
+		if j >= r.h[lenTable] {
+			return ErrBadString
+		}
+		if table[j] == 0 {
+			val = string(table[off:j])
+			break
+		}
+		j++
+	}
+	table = table[j+1:]
+	off = littleEndian(i*2+(r.h[lenExtOff]-r.h[lenExtStrings])*2, r.buf)
+	j = off
+	for {
+		if j >= r.h[lenTable] {
+			return ErrBadString
+		}
+		if table[j] == 0 {
+			break
+		}
+		j++
+	}
+	r.ti.ExtStrings = make(map[string]string)
+	r.ti.ExtStrings[string(table[off:j])] = val
+	return nil
+}
+
 func (r *reader) mapExtNames() {
 	var i int
 	r.ti.ExtBools = make(map[string]bool)
@@ -172,19 +218,16 @@ func (r *reader) mapExtNames() {
 		r.ti.ExtBools[r.extNames[i]] = r.extBools[j]
 		i++
 	}
-	log.Printf("%q\n\n", r.ti.ExtBools)
 	r.ti.ExtNumbers = make(map[string]int16)
 	for j := int16(0); j < r.h[lenExtNumbers]; j++ {
 		r.ti.ExtNumbers[r.extNames[i]] = r.extNumbers[j]
 		i++
 	}
-	log.Printf("%q\n\n", r.ti.ExtNumbers)
 	r.ti.ExtStrings = make(map[string]string)
 	for j := int16(0); j < r.h[lenExtStrings]; j++ {
 		r.ti.ExtStrings[r.extNames[i]] = r.extStrings[j]
 		i++
 	}
-	log.Printf("%q\n\n", r.ti.ExtStrings)
 }
 
 func (r *reader) readExtStringsAndNames() error {
@@ -222,7 +265,6 @@ func (r *reader) readExtStringsAndNames() error {
 			r.extNames[i-r.h[lenExtStrings]] = string(table[off:j])
 		}
 	}
-	log.Printf("%q\n\n", r.extNames)
 	return nil
 }
 
@@ -233,7 +275,6 @@ func (r *reader) readExtBools() {
 			r.extBools[i] = true
 		}
 	}
-	log.Println(r.extBools)
 }
 
 func (r *reader) readExtNumbers() {
@@ -244,7 +285,6 @@ func (r *reader) readExtNumbers() {
 			r.extNumbers[i] = n
 		}
 	}
-	log.Println(r.extNumbers)
 }
 
 func (r *reader) readHeader() error {
