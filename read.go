@@ -18,9 +18,10 @@ var (
 )
 
 // header represents a Terminfo file's header.
+// It is only 5 int16 because we no don't need to store magic.
 type header [5]int16
 
-// No need to store magic.
+// What each int16 means in the standard format.
 const (
 	lenNames = iota
 	lenBools
@@ -29,6 +30,8 @@ const (
 	lenTable
 )
 
+// What each int16 means in the extended format.
+// lenTable is the same in both so it was not repeated here.
 const (
 	lenExtBools = iota
 	lenExtNumbers
@@ -36,7 +39,7 @@ const (
 	lenExtOff
 )
 
-// lenFile returns the length of the file the header describes in bytes.
+// lenCaps returns the length of all of the capabilies in bytes.
 func (h header) lenCaps() int16 {
 	return h[lenNames] +
 		h[lenBools] +
@@ -46,6 +49,7 @@ func (h header) lenCaps() int16 {
 		h[lenTable]
 }
 
+// lenExtCaps returns the length of all the extended capabilities in bytes.
 func (h header) lenExtCaps() int16 {
 	return h[lenExtBools] +
 		h[lenExtBools]%2 +
@@ -55,7 +59,7 @@ func (h header) lenExtCaps() int16 {
 }
 
 // len returns the length of the header in bytes.
-func (h header) len() int16 {
+func (h header) lenBytes() int16 {
 	return int16(len(h) * 2)
 }
 
@@ -115,7 +119,7 @@ func (r *reader) read(f *os.File) (err error) {
 	if err != nil {
 		return
 	}
-	s, hl := int16(fi.Size()), r.h.len()
+	s, hl := int16(fi.Size()), r.h.lenBytes()
 	if s < hl {
 		return ErrSmallFile
 	}
@@ -171,7 +175,7 @@ func (r *reader) read(f *os.File) (err error) {
 }
 
 func (r *reader) readHeader() error {
-	hbuf := r.sliceNext(r.h.len())
+	hbuf := r.sliceNext(r.h.lenBytes())
 	for i := 0; i < len(r.h); i++ {
 		n := littleEndian(int16(i*2), hbuf)
 		if n < 0 {
