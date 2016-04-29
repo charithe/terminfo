@@ -10,6 +10,7 @@ import (
 	"github.com/nhooyr/terminfo/caps"
 )
 
+// TODO better errors
 var (
 	ErrSmallFile  = errors.New("terminfo: file too small")
 	ErrBadString  = errors.New("terminfo: bad string")
@@ -18,25 +19,27 @@ var (
 )
 
 // header represents a Terminfo file's header.
-// It is only 5 int16 because we no don't need to store magic.
+// It is only 5 shorts because we no don't need to store magic.
 type header [5]int16
 
-// What each int16 means in the standard format.
+// What each short means in the standard format.
 const (
-	lenNames = iota
-	lenBools
-	lenNumbers
-	lenStrings
-	lenTable
+	lenNames   = iota // bytes
+	lenBools          // bytes
+	lenNumbers        // shorts
+	lenStrings        // shorts
+	lenTable          // bytes
+	magic      = 0x11a
 )
 
-// What each int16 means in the extended format.
+// What each short means in the extended format.
 // lenTable is the same in both so it was not repeated here.
 const (
-	lenExtBools = iota
-	lenExtNumbers
-	lenExtStrings
-	lenExtOff
+	lenExtBools = iota // bytes
+	// TODO use count?
+	lenExtNumbers // shorts
+	lenExtStrings // shorts
+	lenExtOff     // shorts
 )
 
 // lenCaps returns the length of all of the capabilies in bytes.
@@ -58,12 +61,12 @@ func (h header) lenExtCaps() int16 {
 		h[lenTable]
 }
 
-// len returns the length of the header in bytes.
+// lenBytes returns the length of the header in bytes.
 func (h header) lenBytes() int16 {
 	return int16(len(h) * 2)
 }
 
-// littleEndian decodes a int16 starting at i in buf using little-endian byte order.
+// littleEndian decodes a short starting at i in buf using little-endian byte order.
 func littleEndian(i int16, buf []byte) int16 {
 	return int16(buf[i+1])<<8 | int16(buf[i])
 }
@@ -87,22 +90,25 @@ var readerPool = sync.Pool{
 	},
 }
 
+// sliceNext slices the next off bytesof r.buf.
+// It also increments r.pos by off.
 func (r *reader) sliceNext(off int16) []byte {
 	// Just use off as ppos.
 	off, r.pos = r.pos, r.pos+off
 	return r.buf[off:r.pos]
 }
 
-func (r *reader) evenBoundary(n int16) {
-	if n%2 == 1 {
-		// Skip extra null byte inserted to align everything on word boundaries.
+// evenBoundary checks if we are on an uneven word boundary.
+// If so, it will skip the next byte, which should be a null.
+func (r *reader) evenBoundary() {
+	if r.pos%2 == 1 {
 		r.pos++
 	}
 }
 
-// nextNull returns the position of the next null byte in buf.
+// indexNull returns the position of the next null byte in buf.
 // It is used to find the end of null terminated strings.
-func nextNull(off int16, buf []byte) (int16, error) {
+func indexNull(off int16, buf []byte) (int16, error) {
 	for pos := off; ; pos++ {
 		if pos >= int16(len(buf)) {
 			return 0, ErrBadString
@@ -120,7 +126,7 @@ func (r *reader) read(f *os.File) (err error) {
 		return
 	}
 	s, hl := int16(fi.Size()), r.h.lenBytes()
-	if s < hl {
+	if s < hl+2 { // add 2 for the magic
 		return ErrSmallFile
 	}
 	if s > int16(cap(r.buf)) {
@@ -131,10 +137,11 @@ func (r *reader) read(f *os.File) (err error) {
 	if _, err = io.ReadAtLeast(f, r.buf, int(s)); err != nil {
 		return
 	}
-	if littleEndian(0, r.buf) != 0x11A {
+	// Check magic.
+	if littleEndian(0, r.buf) != magic {
 		return ErrBadHeader
 	}
-	r.pos = 2 // skip magic
+	r.pos = 2 // Skip magic.
 	if err = r.readHeader(); err != nil {
 		return
 	}
@@ -144,19 +151,21 @@ func (r *reader) read(f *os.File) (err error) {
 	r.ti = new(Terminfo)
 	r.ti.Names = strings.Split(string(r.sliceNext(r.h[lenNames])), "|")
 	r.readBools()
-	r.evenBoundary(r.pos)
+	r.evenBoundary()
 	r.readNumbers()
 	if err = r.readStrings(); err != nil || s <= r.pos {
 		return
 	}
 	// We have extended capabilities.
-	r.evenBoundary(r.pos)
-	s -= r.pos
-	if s < hl {
+	r.evenBoundary()
+	if s -= r.pos; s < hl {
 		return ErrSmallFile
 	}
 	if err = r.readHeader(); err != nil {
 		return
+	}
+	if r.h[lenExtBools]+r.h[lenExtNumbers]+r.h[lenExtStrings]*2 != r.h[lenExtOff] {
+		return ErrBadHeader
 	}
 	if s-hl < r.h.lenExtCaps() {
 		return ErrSmallFile
@@ -167,7 +176,7 @@ func (r *reader) read(f *os.File) (err error) {
 	if err = r.readExtBools(); err != nil {
 		return
 	}
-	r.evenBoundary(r.h[lenExtBools])
+	r.evenBoundary()
 	if err = r.readExtNumbers(); err != nil {
 		return
 	}
@@ -218,7 +227,7 @@ func (r *reader) readStrings() error {
 	table := r.sliceNext(r.h[lenTable])
 	for i := int16(0); i < r.h[lenStrings]; i++ {
 		if off := littleEndian(i*2, sbuf); off > -1 {
-			end, err := nextNull(off, table)
+			end, err := indexNull(off, table)
 			if err != nil {
 				return err
 			}
@@ -231,10 +240,9 @@ func (r *reader) readStrings() error {
 func (r *reader) setExtNameTable() error {
 	// Beginning of name offsets.
 	nameOffPos := r.pos +
-		r.h[lenExtBools] +
 		r.h[lenExtBools]%2 +
-		r.h[lenExtNumbers]*2 +
-		r.h[lenExtStrings]*2
+		r.h[lenExtNumbers] +
+		r.h[lenExtOff] // equal to r.h[lenExtBools]+r.h[lenExtNumbers]+r.h[lenExtStrings]*2
 	lenNameOffs := (r.h[lenExtOff] - r.h[lenExtStrings]) * 2
 	// Find last string offset.
 	lpos, loff := nameOffPos, int16(0)
@@ -243,7 +251,6 @@ func (r *reader) setExtNameTable() error {
 		if lpos < r.pos {
 			return ErrBadString
 		}
-		// TODO no! stop this:
 		r.h[lenExtStrings]--
 		if loff = littleEndian(lpos, r.buf); loff > -1 {
 			break
@@ -251,7 +258,7 @@ func (r *reader) setExtNameTable() error {
 	}
 	// Read the capability value.
 	r.extStringTable = r.buf[nameOffPos+lenNameOffs:]
-	end, err := nextNull(loff, r.extStringTable)
+	end, err := indexNull(loff, r.extStringTable)
 	if err != nil {
 		return err
 	}
@@ -273,7 +280,7 @@ func (r *reader) setExtNameTable() error {
 
 func (r *reader) nextExtName() (string, error) {
 	off := littleEndian(r.extNameOffPos, r.buf)
-	end, err := nextNull(off, r.extNameTable)
+	end, err := indexNull(off, r.extNameTable)
 	if err != nil {
 		return "", err
 	}
@@ -281,7 +288,7 @@ func (r *reader) nextExtName() (string, error) {
 	return string(r.extNameTable[off:end]), nil
 }
 
-func (r *reader) readExtBools() error {
+func (r *reader) readExtBools() (err error) {
 	r.ti.ExtBools = make(map[string]bool)
 	for _, b := range r.sliceNext(r.h[lenExtBools]) {
 		if b == 1 {
@@ -295,7 +302,7 @@ func (r *reader) readExtBools() error {
 	return nil
 }
 
-func (r *reader) readExtNumbers() error {
+func (r *reader) readExtNumbers() (err error) {
 	r.ti.ExtNumbers = make(map[string]int16)
 	nbuf := r.sliceNext(r.h[lenExtNumbers] * 2)
 	for i := int16(0); i < r.h[lenExtNumbers]; i++ {
@@ -310,10 +317,10 @@ func (r *reader) readExtNumbers() error {
 	return nil
 }
 
-func (r *reader) readExtStrings() error {
+func (r *reader) readExtStrings() (err error) {
 	for lpos := r.pos + r.h[lenExtStrings]*2; r.pos < lpos; r.pos += 2 {
 		if off := littleEndian(r.pos, r.buf); off > -1 {
-			end, err := nextNull(off, r.extStringTable)
+			end, err := indexNull(off, r.extStringTable)
 			if err != nil {
 				return err
 			}

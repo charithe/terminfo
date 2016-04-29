@@ -1,7 +1,6 @@
 package terminfo_test
 
 import (
-	"log"
 	"os"
 	"testing"
 
@@ -15,7 +14,7 @@ func TestOpen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	log.Printf("%q\n", ti)
+	t.Logf("%q", ti.ExtStrings["kNXT3"])
 }
 
 var result interface{}
