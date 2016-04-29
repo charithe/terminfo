@@ -66,12 +66,12 @@ func littleEndian(i int16, buf []byte) int16 {
 
 type reader struct {
 	pos            int16
+	extNameOffPos  int16 // position in the name offsets
 	h              header
-	ti             *Terminfo
 	buf            []byte
 	extStringTable []byte
-	extNameOffPos  int16 // position in the name offsets
 	extNameTable   []byte
+	ti             *Terminfo
 }
 
 var readerPool = sync.Pool{
