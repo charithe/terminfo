@@ -164,12 +164,14 @@ func (r *reader) read(f *os.File) (err error) {
 	if err = r.setExtNameTable(); err != nil {
 		return
 	}
-	// TODO handle errors.
-	r.readExtBools()
+	if err = r.readExtBools(); err != nil {
+		return
+	}
 	r.evenBoundary(r.h[lenExtBools])
-	r.readExtNumbers()
-	r.readExtStrings()
-	return
+	if err = r.readExtNumbers(); err != nil {
+		return
+	}
+	return r.readExtStrings()
 }
 
 func (r *reader) readHeader() error {
