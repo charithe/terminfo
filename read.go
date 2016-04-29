@@ -309,23 +309,21 @@ func (r *reader) readExtNumbers() error {
 func (r *reader) readExtStrings() error {
 	tpos := r.pos + r.h[lenExtOff]*2
 	table := r.buf[tpos : tpos+r.h[lenTable]]
-	// Subtract -1 from lenExtStrings to ignore the already read offset.
-	for lpos := r.pos + r.h[lenExtStrings] - 1; r.pos < lpos; r.pos += 2 {
+	// Subtract -2 from lenExtStrings to ignore the last offset which was already read.
+OFFLOOP:
+	for lastPos := r.pos + r.h[lenExtStrings] - 2; r.pos < lastPos; r.pos += 2 {
 		if off := littleEndian(r.pos, r.buf); off > -1 {
-			for j := off; ; {
-				if j >= r.h[lenTable] {
-					return ErrBadString
-				}
-				if table[j] == 0 {
+			for i := off; i < r.h[lenTable]; i++ {
+				if table[i] == 0 {
 					name, err := r.nextExtName()
 					if err != nil {
 						return err
 					}
-					r.ti.ExtStrings[name] = string(table[off:j])
-					break
+					r.ti.ExtStrings[name] = string(table[off:i])
+					continue OFFLOOP
 				}
-				j++
 			}
+			return ErrBadString
 		}
 	}
 	return nil
