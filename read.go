@@ -241,6 +241,7 @@ func (r *reader) setExtNameTable() error {
 		r.h[lenExtBools]%2 +
 		r.h[lenExtNumbers]*2 +
 		r.h[lenExtStrings]*2
+	lenNameOffs := (r.h[lenExtOff] - r.h[lenExtStrings]) * 2
 	// Find last string offset.
 	lpos, loff := nameOffPos, int16(0)
 	for {
@@ -249,21 +250,22 @@ func (r *reader) setExtNameTable() error {
 			// TODO error?
 			return ErrBadString
 		}
+		r.h[lenExtStrings]--
 		if loff = littleEndian(lpos, r.buf); loff > -1 {
 			break
 		}
 	}
 	// Read the capability value.
-	lenNameOffs := (r.h[lenExtOff] - r.h[lenExtStrings]) * 2
-	r.extNameTable = r.buf[nameOffPos+lenNameOffs:]
+	r.extStringTable = r.buf[nameOffPos+lenNameOffs:]
 	val := ""
 	for i := loff; ; i++ {
 		if i >= r.h[lenTable] {
 			return ErrBadString
 		}
-		if r.extNameTable[i] == 0 {
-			val = string(r.extNameTable[loff:i])
-			r.extNameTable = r.extNameTable[i+1:]
+		if r.extStringTable[i] == 0 {
+			val = string(r.extStringTable[loff:i])
+			i++
+			r.extStringTable, r.extNameTable = r.extStringTable[:loff], r.extStringTable[i:]
 			break
 		}
 	}
@@ -275,6 +277,7 @@ func (r *reader) setExtNameTable() error {
 	}
 	r.ti.ExtStrings = make(map[string]string)
 	r.ti.ExtStrings[name] = val
+	// Set extNameOffPos to the start of the name offset section.
 	r.extNameOffPos = nameOffPos
 	return nil
 }
@@ -309,19 +312,16 @@ func (r *reader) readExtNumbers() error {
 }
 
 func (r *reader) readExtStrings() error {
-	tpos := r.pos + r.h[lenExtOff]*2
-	table := r.buf[tpos : tpos+r.h[lenTable]]
-	// Subtract -2 from lenExtStrings to ignore the last offset which was already read.
 OFFLOOP:
-	for lastPos := r.pos + r.h[lenExtStrings] - 2; r.pos < lastPos; r.pos += 2 {
+	for lastPos := r.pos + r.h[lenExtStrings]*2; r.pos < lastPos; r.pos += 2 {
 		if off := littleEndian(r.pos, r.buf); off > -1 {
-			for i := off; i < r.h[lenTable]; i++ {
-				if table[i] == 0 {
+			for i := int(off); i < len(r.extStringTable); i++ {
+				if r.extStringTable[i] == 0 {
 					name, err := r.nextExtName()
 					if err != nil {
 						return err
 					}
-					r.ti.ExtStrings[name] = string(table[off:i])
+					r.ti.ExtStrings[name] = string(r.extStringTable[off:i])
 					continue OFFLOOP
 				}
 			}
