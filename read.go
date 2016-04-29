@@ -47,8 +47,7 @@ func (h header) lenFile() int16 {
 }
 
 func (h header) lenExt() int16 {
-	return h.len() +
-		h[lenExtBools] +
+	return h[lenExtBools] +
 		h[lenExtBools]%2 +
 		h[lenExtNumbers]*2 +
 		h[lenExtOff]*2 +
@@ -67,12 +66,12 @@ func littleEndian(i int16, buf []byte) int16 {
 
 type reader struct {
 	pos int16
-	buf []byte
-	ti  *Terminfo
 	// TODO: use pointer here or nah?
-	h              header
-	extStringTable []byte
 	extNameOffPos  int16 // position in the name offsets
+	h              header
+	ti             *Terminfo
+	buf            []byte
+	extStringTable []byte
 	extNameTable   []byte
 }
 
@@ -98,19 +97,27 @@ func (r *reader) evenBoundary(i int16) {
 	}
 }
 
-func (r *reader) nextExtName() (string, error) {
-	loff := littleEndian(r.extNameOffPos, r.buf)
-	lpos := loff
-	for {
-		if lpos >= r.h[lenTable] {
-			return "", ErrBadString
+// nextNull returns the position of the next null byte in buf.
+// It is used to find the end of null terminated strings.
+func nextNull(off int16, buf []byte) (int, error) {
+	for pos := int(off); ; pos++ {
+		if pos >= len(buf) {
+			return 0, ErrBadString
 		}
-		if r.extNameTable[lpos] == 0 {
-			r.extNameOffPos += 2
-			return string(r.extNameTable[loff:lpos]), nil
+		if buf[pos] == 0 {
+			return pos, nil
 		}
-		lpos++
 	}
+}
+
+func (r *reader) nextExtName() (string, error) {
+	off := littleEndian(r.extNameOffPos, r.buf)
+	end, err := nextNull(off, r.extNameTable)
+	if err != nil {
+		return "", err
+	}
+	r.extNameOffPos += 2
+	return string(r.extNameTable[off:end]), nil
 }
 
 // TODO read ncurses and find more sanity checks
@@ -120,7 +127,8 @@ func (r *reader) read(f *os.File) (err error) {
 		return
 	}
 	s := int16(fi.Size())
-	if s < r.h.len() {
+	hl := r.h.len()
+	if s < hl {
 		return ErrSmallFile
 	}
 	if s > int16(cap(r.buf)) {
@@ -152,13 +160,13 @@ func (r *reader) read(f *os.File) (err error) {
 	// We have extended capabilities.
 	r.evenBoundary(r.pos)
 	s -= r.pos
-	if s < r.h.len() {
+	if s < hl {
 		return ErrSmallFile
 	}
 	if err = r.readHeader(); err != nil {
 		return
 	}
-	if s < r.h.lenExt() {
+	if s-hl < r.h.lenExt() {
 		return ErrSmallFile
 	}
 	if err = r.setExtNameTable(); err != nil {
@@ -218,17 +226,11 @@ func (r *reader) readStrings() error {
 	table := r.sliceOff(r.h[lenTable])
 	for i := int16(0); i < r.h[lenStrings]; i++ {
 		if off := littleEndian(i*2, sbuf); off > -1 {
-			j := off
-			for {
-				if j >= r.h[lenTable] {
-					return ErrBadString
-				}
-				if table[j] == 0 {
-					break
-				}
-				j++
+			end, err := nextNull(off, table)
+			if err != nil {
+				return err
 			}
-			r.ti.Strings[i] = string(table[off:j])
+			r.ti.Strings[i] = string(table[off:end])
 		}
 	}
 	return nil
@@ -250,6 +252,7 @@ func (r *reader) setExtNameTable() error {
 			// TODO error?
 			return ErrBadString
 		}
+		// TODO no! stop this:
 		r.h[lenExtStrings]--
 		if loff = littleEndian(lpos, r.buf); loff > -1 {
 			break
@@ -257,17 +260,12 @@ func (r *reader) setExtNameTable() error {
 	}
 	// Read the capability value.
 	r.extStringTable = r.buf[nameOffPos+lenNameOffs:]
-	i := loff
-	for ; ; i++ {
-		if i >= r.h[lenTable] {
-			return ErrBadString
-		}
-		if r.extStringTable[i] == 0 {
-			break
-		}
+	end, err := nextNull(loff, r.extStringTable)
+	if err != nil {
+		return err
 	}
-	val := string(r.extStringTable[loff:i])
-	r.extNameTable = r.extStringTable[i+1:]
+	val := string(r.extStringTable[loff:end])
+	r.extNameTable = r.extStringTable[end+1:]
 	r.extStringTable = r.extStringTable[:loff]
 	r.extNameOffPos = lpos + lenNameOffs
 	key, err := r.nextExtName()
@@ -312,20 +310,17 @@ func (r *reader) readExtNumbers() error {
 }
 
 func (r *reader) readExtStrings() error {
-OFFLOOP:
 	for lastPos := r.pos + r.h[lenExtStrings]*2; r.pos < lastPos; r.pos += 2 {
 		if off := littleEndian(r.pos, r.buf); off > -1 {
-			for i := int(off); i < len(r.extStringTable); i++ {
-				if r.extStringTable[i] == 0 {
-					key, err := r.nextExtName()
-					if err != nil {
-						return err
-					}
-					r.ti.ExtStrings[key] = string(r.extStringTable[off:i])
-					continue OFFLOOP
-				}
+			end, err := nextNull(off, r.extStringTable)
+			if err != nil {
+				return err
 			}
-			return ErrBadString
+			key, err := r.nextExtName()
+			if err != nil {
+				return err
+			}
+			r.ti.ExtStrings[key] = string(r.extStringTable[off:end])
 		}
 	}
 	return nil

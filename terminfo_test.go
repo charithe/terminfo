@@ -15,8 +15,7 @@ func TestOpen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	log.Printf("%q\n", ti.ExtStrings)
-	log.Printf("%d\n", len(ti.ExtStrings))
+	log.Printf("%q\n", ti)
 }
 
 var result interface{}
