@@ -22,6 +22,9 @@ var (
 // It is only 5 shorts because we no don't need to store magic.
 type header [5]int16
 
+// The magic number of terminfo files.
+const magic = 0x11a
+
 // What each short means in the standard format.
 const (
 	lenNames   = iota // bytes
@@ -29,17 +32,15 @@ const (
 	lenNumbers        // shorts
 	lenStrings        // shorts
 	lenTable          // bytes
-	magic      = 0x11a
 )
 
 // What each short means in the extended format.
 // lenTable is the same in both so it was not repeated here.
 const (
-	lenExtBools = iota // bytes
-	// TODO use count?
-	lenExtNumbers // shorts
-	lenExtStrings // shorts
-	lenExtOff     // shorts
+	lenExtBools   = iota // bytes
+	lenExtNumbers        // shorts
+	lenExtStrings        // shorts
+	lenExtOff            // shorts
 )
 
 // lenCaps returns the length of all of the capabilies in bytes.
