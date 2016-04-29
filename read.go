@@ -3,7 +3,6 @@ package terminfo
 import (
 	"errors"
 	"io"
-	"log"
 	"os"
 	"strings"
 	"sync"
@@ -39,11 +38,9 @@ const (
 
 // lenFile returns the length of the file the header describes in bytes.
 func (h header) lenFile() int16 {
-	return 2 + // 2 for magic
-		h.len() +
-		h[lenNames] +
+	return h[lenNames] +
 		h[lenBools] +
-		(h[lenBools]+h[lenNames])%2 +
+		(h[lenNames]+h[lenBools])%2 +
 		h[lenNumbers]*2 +
 		h[lenStrings]*2 +
 		h[lenTable]
@@ -73,12 +70,10 @@ type reader struct {
 	buf []byte
 	ti  *Terminfo
 	// TODO: use pointer here or nah?
-	h          header
-	noff       int16
-	extBools   []bool
-	extNumbers []int16
-	extStrings []string
-	extNames   []string
+	h              header
+	extStringTable []byte
+	extNameOffPos  int16 // position in the name offsets
+	extNameTable   []byte
 }
 
 var readerPool = sync.Pool{
@@ -100,6 +95,21 @@ func (r *reader) evenBoundary(i int16) {
 	if i%2 == 1 {
 		// Skip extra null byte inserted to align everything on word boundaries.
 		r.pos++
+	}
+}
+
+func (r *reader) nextExtName() (string, error) {
+	loff := littleEndian(r.extNameOffPos, r.buf)
+	lpos := loff
+	for {
+		if lpos >= r.h[lenTable] {
+			return "", ErrBadString
+		}
+		if r.extNameTable[lpos] == 0 {
+			r.extNameOffPos += 2
+			return string(r.extNameTable[loff:lpos]), nil
+		}
+		lpos++
 	}
 }
 
@@ -128,8 +138,7 @@ func (r *reader) read(f *os.File) (err error) {
 	if err = r.readHeader(); err != nil {
 		return
 	}
-	hl := r.h.lenFile()
-	if s < hl {
+	if s-r.pos < r.h.lenFile() {
 		return ErrSmallFile
 	}
 	r.ti = new(Terminfo)
@@ -137,7 +146,7 @@ func (r *reader) read(f *os.File) (err error) {
 	r.readBools()
 	r.evenBoundary(r.pos)
 	r.readNumbers()
-	if err = r.readStrings(); err != nil || s <= hl {
+	if err = r.readStrings(); err != nil || s <= r.pos {
 		return
 	}
 	// We have extended capabilities.
@@ -152,139 +161,15 @@ func (r *reader) read(f *os.File) (err error) {
 	if s < r.h.lenExt() {
 		return ErrSmallFile
 	}
-	r.readExtNames()
-	return
+	if err = r.setExtNameTable(); err != nil {
+		return
+	}
+	// TODO handle errors.
 	r.readExtBools()
 	r.evenBoundary(r.h[lenExtBools])
 	r.readExtNumbers()
-	if err = r.readExtStringsAndNames(); err != nil {
-		return
-	}
-	r.mapExtNames()
-	return nil
-}
-
-func (r *reader) readExtNames() error {
-	r.noff = r.pos + r.h[lenExtBools] +
-		r.h[lenExtBools]%2 +
-		r.h[lenExtNumbers]*2 +
-		r.h[lenExtStrings]*2
-	// name offsets
-	log.Printf("%q\n\n", r.buf[r.noff:r.noff+(r.h[lenExtOff]-r.h[lenExtStrings])*2])
-	// offset for the string offsets
-	soff := r.pos / 2
-	tableOff := r.pos + r.h[lenExtBools] + r.h[lenExtBools]%2 + r.h[lenExtNumbers]*2 + r.h[lenExtOff]*2
-	table := r.buf[tableOff:]
-	var off, i int16
-	for i = r.h[lenExtStrings] + soff; i > soff; i-- {
-		if off = littleEndian(i*2, r.buf); off > -1 {
-			break
-		}
-	}
-	j := off
-	var val string
-	for {
-		// TODO fix len table
-		if j >= r.h[lenTable] {
-			return ErrBadString
-		}
-		if table[j] == 0 {
-			val = string(table[off:j])
-			break
-		}
-		j++
-	}
-	table = table[j+1:]
-	off = littleEndian(i*2+(r.h[lenExtOff]-r.h[lenExtStrings])*2, r.buf)
-	j = off
-	for {
-		if j >= r.h[lenTable] {
-			return ErrBadString
-		}
-		if table[j] == 0 {
-			break
-		}
-		j++
-	}
-	r.ti.ExtStrings = make(map[string]string)
-	r.ti.ExtStrings[string(table[off:j])] = val
-	return nil
-}
-
-func (r *reader) mapExtNames() {
-	var i int
-	r.ti.ExtBools = make(map[string]bool)
-	for j := int16(0); j < r.h[lenExtBools]; j++ {
-		r.ti.ExtBools[r.extNames[i]] = r.extBools[j]
-		i++
-	}
-	r.ti.ExtNumbers = make(map[string]int16)
-	for j := int16(0); j < r.h[lenExtNumbers]; j++ {
-		r.ti.ExtNumbers[r.extNames[i]] = r.extNumbers[j]
-		i++
-	}
-	r.ti.ExtStrings = make(map[string]string)
-	for j := int16(0); j < r.h[lenExtStrings]; j++ {
-		r.ti.ExtStrings[r.extNames[i]] = r.extStrings[j]
-		i++
-	}
-}
-
-func (r *reader) readExtStringsAndNames() error {
-	sbuf := r.sliceOff(r.h[lenExtOff] * 2)
-	table := r.sliceOff(r.h[lenTable])
-	r.extStrings = make([]string, r.h[lenExtStrings])
-	var j int16
-	for i := int16(0); i < r.h[lenExtStrings]; i++ {
-		if off := littleEndian(i*2, sbuf); off > -1 {
-			for j = off; ; {
-				if j >= r.h[lenTable] {
-					return ErrBadString
-				}
-				if table[j] == 0 {
-					break
-				}
-				j++
-			}
-			r.extStrings[i] = string(table[off:j])
-		}
-	}
-	table = table[j+1:]
-	r.extNames = make([]string, r.h[lenExtOff]-r.h[lenExtStrings])
-	for i := r.h[lenExtStrings]; i < r.h[lenExtOff]; i++ {
-		if off := littleEndian(i*2, sbuf); off > -1 {
-			for j = off; ; {
-				if j >= r.h[lenTable] {
-					return ErrBadString
-				}
-				if table[j] == 0 {
-					break
-				}
-				j++
-			}
-			r.extNames[i-r.h[lenExtStrings]] = string(table[off:j])
-		}
-	}
-	return nil
-}
-
-func (r *reader) readExtBools() {
-	r.extBools = make([]bool, r.h[lenExtBools])
-	for i, b := range r.sliceOff(r.h[lenExtBools]) {
-		if b == 1 {
-			r.extBools[i] = true
-		}
-	}
-}
-
-func (r *reader) readExtNumbers() {
-	nbuf := r.sliceOff(r.h[lenExtNumbers] * 2)
-	r.extNumbers = make([]int16, r.h[lenExtNumbers])
-	for i := int16(0); i < r.h[lenExtNumbers]; i++ {
-		if n := littleEndian(i*2, nbuf); n > -1 {
-			r.extNumbers[i] = n
-		}
-	}
+	r.readExtStrings()
+	return
 }
 
 func (r *reader) readHeader() error {
@@ -342,6 +227,105 @@ func (r *reader) readStrings() error {
 				j++
 			}
 			r.ti.Strings[i] = string(table[off:j])
+		}
+	}
+	return nil
+}
+
+func (r *reader) setExtNameTable() error {
+	// Beginning of name offsets.
+	nameOffPos := r.pos +
+		r.h[lenExtBools] +
+		r.h[lenExtBools]%2 +
+		r.h[lenExtNumbers]*2 +
+		r.h[lenExtStrings]*2
+	// Find last string offset.
+	lpos, loff := nameOffPos, int16(0)
+	for {
+		lpos -= 2
+		if lpos < r.pos {
+			// TODO error?
+			return ErrBadString
+		}
+		if loff = littleEndian(lpos, r.buf); loff > -1 {
+			break
+		}
+	}
+	// Read the capability value.
+	lenNameOffs := (r.h[lenExtOff] - r.h[lenExtStrings]) * 2
+	r.extNameTable = r.buf[nameOffPos+lenNameOffs:]
+	val := ""
+	for i := loff; ; i++ {
+		if i >= r.h[lenTable] {
+			return ErrBadString
+		}
+		if r.extNameTable[i] == 0 {
+			val = string(r.extNameTable[loff:i])
+			r.extNameTable = r.extNameTable[i+1:]
+			break
+		}
+	}
+	r.extNameOffPos = lpos + lenNameOffs
+	name, err := r.nextExtName()
+	if err != nil {
+		// TODO error?
+		return ErrBadString
+	}
+	r.ti.ExtStrings = make(map[string]string)
+	r.ti.ExtStrings[name] = val
+	r.extNameOffPos = nameOffPos
+	return nil
+}
+
+func (r *reader) readExtBools() error {
+	r.ti.ExtBools = make(map[string]bool)
+	for _, b := range r.sliceOff(r.h[lenExtBools]) {
+		if b == 1 {
+			name, err := r.nextExtName()
+			if err != nil {
+				return err
+			}
+			r.ti.ExtBools[name] = true
+		}
+	}
+	return nil
+}
+
+func (r *reader) readExtNumbers() error {
+	r.ti.ExtNumbers = make(map[string]int16)
+	nbuf := r.sliceOff(r.h[lenExtNumbers] * 2)
+	for i := int16(0); i < r.h[lenExtNumbers]; i++ {
+		if n := littleEndian(i*2, nbuf); n > -1 {
+			name, err := r.nextExtName()
+			if err != nil {
+				return err
+			}
+			r.ti.ExtNumbers[name] = n
+		}
+	}
+	return nil
+}
+
+func (r *reader) readExtStrings() error {
+	tpos := r.pos + r.h[lenExtOff]*2
+	table := r.buf[tpos : tpos+r.h[lenTable]]
+	// Subtract -1 from lenExtStrings to ignore the already read offset.
+	for lpos := r.pos + r.h[lenExtStrings] - 1; r.pos < lpos; r.pos += 2 {
+		if off := littleEndian(r.pos, r.buf); off > -1 {
+			for j := off; ; {
+				if j >= r.h[lenTable] {
+					return ErrBadString
+				}
+				if table[j] == 0 {
+					name, err := r.nextExtName()
+					if err != nil {
+						return err
+					}
+					r.ti.ExtStrings[name] = string(table[off:j])
+					break
+				}
+				j++
+			}
 		}
 	}
 	return nil
