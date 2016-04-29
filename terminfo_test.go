@@ -14,14 +14,7 @@ func TestOpen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Log(ti.Names[0])
-	t.Log(ti.Bools[caps.BackColorErase])
-	t.Log(ti.Numbers[caps.MaxColors])
-	t.Logf("%q", ti.Strings[caps.SetAForeground])
-	t.Logf("%q", ti.Color(9, -1))
-	t.Logf("%q", ti.ExtBools)
-	t.Logf("%q", ti.ExtNumbers)
-	t.Logf("%q", ti.ExtStrings)
+	t.Logf("%q", ti)
 }
 
 var result interface{}
