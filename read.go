@@ -90,8 +90,8 @@ func (r *reader) sliceOff(off int16) []byte {
 	return r.buf[off:r.pos]
 }
 
-func (r *reader) evenBoundary(i int16) {
-	if i%2 == 1 {
+func (r *reader) evenBoundary(n int16) {
+	if n%2 == 1 {
 		// Skip extra null byte inserted to align everything on word boundaries.
 		r.pos++
 	}
@@ -110,30 +110,19 @@ func nextNull(off int16, buf []byte) (int, error) {
 	}
 }
 
-func (r *reader) nextExtName() (string, error) {
-	off := littleEndian(r.extNameOffPos, r.buf)
-	end, err := nextNull(off, r.extNameTable)
-	if err != nil {
-		return "", err
-	}
-	r.extNameOffPos += 2
-	return string(r.extNameTable[off:end]), nil
-}
-
 // TODO read ncurses and find more sanity checks
 func (r *reader) read(f *os.File) (err error) {
 	fi, err := f.Stat()
 	if err != nil {
 		return
 	}
-	s := int16(fi.Size())
-	hl := r.h.len()
+	s, hl := int16(fi.Size()), r.h.len()
 	if s < hl {
 		return ErrSmallFile
 	}
 	if s > int16(cap(r.buf)) {
 		r.buf = make([]byte, s, s*2+1)
-	} else {
+	} else if s > int16(len(r.buf)) {
 		r.buf = r.buf[:s]
 	}
 	if _, err = io.ReadAtLeast(f, r.buf, int(s)); err != nil {
@@ -146,6 +135,8 @@ func (r *reader) read(f *os.File) (err error) {
 	if err = r.readHeader(); err != nil {
 		return
 	}
+	// TODO figure out a better way to do these checks.
+	// GET RID OF ALL THESE DAMN CASTS, MAKES ME ANGRY
 	if s-r.pos < r.h.lenFile() {
 		return ErrSmallFile
 	}
@@ -278,6 +269,16 @@ func (r *reader) setExtNameTable() error {
 	// Set extNameOffPos to the start of the name offset section.
 	r.extNameOffPos = nameOffPos
 	return nil
+}
+
+func (r *reader) nextExtName() (string, error) {
+	off := littleEndian(r.extNameOffPos, r.buf)
+	end, err := nextNull(off, r.extNameTable)
+	if err != nil {
+		return "", err
+	}
+	r.extNameOffPos += 2
+	return string(r.extNameTable[off:end]), nil
 }
 
 func (r *reader) readExtBools() error {
