@@ -1,10 +1,8 @@
 package terminfo_test
 
 import (
-	"os"
 	"testing"
 
-	"github.com/gdamore/tcell"
 	"github.com/nhooyr/terminfo"
 	"github.com/nhooyr/terminfo/caps"
 )
@@ -14,30 +12,32 @@ func TestOpen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("%q", ti.ExtStrings["XM"])
-	t.Logf("%q", ti.ExtStrings["kUP7"])
+	s, err := ti.Parm(caps.SetAForeground, 232)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("%q", s)
+}
+
+func TestParm(t *testing.T) {
+	t.Logf("%q", terminfo.Parm("%p1% d", 343))
 }
 
 var result interface{}
 
 func BenchmarkOpen(b *testing.B) {
 	var r *terminfo.Terminfo
+	var err error
 	for i := 0; i < b.N; i++ {
-		r, _ = terminfo.OpenEnv()
-	}
-	result = r
-}
-
-func BenchmarkTcellOpen(b *testing.B) {
-	var r *tcell.Terminfo
-	for i := 0; i < b.N; i++ {
-		r, _ = tcell.LookupTerminfo(os.Getenv("TERM"))
+		r, err = terminfo.OpenEnv()
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 	result = r
 }
 
 func BenchmarkParm(b *testing.B) {
-	// TODO GLOBAL
 	ti, err := terminfo.OpenEnv()
 	if err != nil {
 		b.Fatal(err)
@@ -46,18 +46,6 @@ func BenchmarkParm(b *testing.B) {
 	v := ti.Strings[caps.SetAForeground]
 	for i := 0; i < b.N; i++ {
 		r = terminfo.Parm(v, 7, 5)
-	}
-	result = r
-}
-
-func BenchmarkTcellParm(b *testing.B) {
-	ti, err := tcell.LookupTerminfo(os.Getenv("TERM"))
-	if err != nil {
-		b.Fatal(err)
-	}
-	var r string
-	for i := 0; i < b.N; i++ {
-		r = ti.TParm(ti.SetFg, 7, 5)
 	}
 	result = r
 }

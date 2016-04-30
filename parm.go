@@ -9,42 +9,42 @@ import (
 
 type stack []interface{}
 
-func (st *stack) push(v interface{}) {
-	*st = append(*st, v)
+func (stk *stack) push(v interface{}) {
+	*stk = append(*stk, v)
 }
 
-func (st *stack) pop() interface{} {
-	if len(*st) == 0 {
+func (stk *stack) pop() interface{} {
+	if len(*stk) == 0 {
 		return nil
 	}
-	v := (*st)[len(*st)-1]
-	*st = (*st)[:len(*st)-1]
+	v := (*stk)[len(*stk)-1]
+	*stk = (*stk)[:len(*stk)-1]
 	return v
 }
 
-func (st *stack) popInt() int {
-	if ai, ok := st.pop().(int); ok {
+func (stk *stack) popInt() int {
+	if ai, ok := stk.pop().(int); ok {
 		return ai
 	}
 	return 0
 }
 
-func (st *stack) popBool() bool {
-	if ab, ok := st.pop().(bool); ok {
+func (stk *stack) popBool() bool {
+	if ab, ok := stk.pop().(bool); ok {
 		return ab
 	}
 	return false
 }
 
-func (st *stack) popByte() byte {
-	if ab, ok := st.pop().(byte); ok {
+func (stk *stack) popByte() byte {
+	if ab, ok := stk.pop().(byte); ok {
 		return ab
 	}
 	return 0
 }
 
-func (st *stack) popString() string {
-	if as, ok := st.pop().(string); ok {
+func (stk *stack) popString() string {
+	if as, ok := stk.pop().(string); ok {
 		return as
 	}
 	return ""
@@ -55,7 +55,7 @@ type parametizer struct {
 	s        string          // terminfo string
 	pos      int             // position in s
 	nest     int             // nesting level of if statements
-	st       stack           // terminfo var stack
+	stk      stack           // terminfo var stack
 	skipElse bool            // controls which fuction skipText returns
 	buf      *bytes.Buffer   // result buffer
 	params   [9]interface{}  // paramters
@@ -84,7 +84,7 @@ func getParametizer(s string) *parametizer {
 func (pz *parametizer) free() {
 	pz.pos = 0
 	pz.nest = 0
-	pz.st = pz.st[:0]
+	pz.stk = pz.stk[:0]
 	pz.buf.Reset()
 	pz.params = [9]interface{}{}
 	pz.dvars = [26]interface{}{}
@@ -160,11 +160,11 @@ func scanCode(pz *parametizer) stateFn {
 		pz.params[0] = pz.params[0].(int) + 1
 		pz.params[1] = pz.params[1].(int) + 1
 	case 'c':
-		pz.buf.WriteByte(pz.st.popByte())
+		pz.buf.WriteByte(pz.stk.popByte())
 	case 's':
-		pz.buf.WriteString(pz.st.popString())
+		pz.buf.WriteString(pz.stk.popString())
 	case 'd':
-		pz.buf.WriteString(strconv.Itoa(pz.st.popInt()))
+		pz.buf.WriteString(strconv.Itoa(pz.stk.popInt()))
 	case ':':
 		// TODO implement
 	case 'p':
@@ -182,59 +182,59 @@ func scanCode(pz *parametizer) stateFn {
 		if err != nil {
 			return nil
 		}
-		pz.st.push(ch)
+		pz.stk.push(ch)
 		// skip the '\''
 		pz.pos++
 	case '{':
 		pz.pos++
 		return pushInt
 	case 'l':
-		pz.st.push(len(pz.st.popString()))
+		pz.stk.push(len(pz.stk.popString()))
 	case '+':
-		bi, ai := pz.st.popInt(), pz.st.popInt()
-		pz.st.push(ai + bi)
+		bi, ai := pz.stk.popInt(), pz.stk.popInt()
+		pz.stk.push(ai + bi)
 	case '-':
-		bi, ai := pz.st.popInt(), pz.st.popInt()
-		pz.st.push(ai - bi)
+		bi, ai := pz.stk.popInt(), pz.stk.popInt()
+		pz.stk.push(ai - bi)
 	case '*':
-		bi, ai := pz.st.popInt(), pz.st.popInt()
-		pz.st.push(ai * bi)
+		bi, ai := pz.stk.popInt(), pz.stk.popInt()
+		pz.stk.push(ai * bi)
 	case '/':
-		bi, ai := pz.st.popInt(), pz.st.popInt()
+		bi, ai := pz.stk.popInt(), pz.stk.popInt()
 		if bi != 0 {
-			pz.st.push(ai / bi)
+			pz.stk.push(ai / bi)
 		} else {
-			pz.st.push(0)
+			pz.stk.push(0)
 		}
 	case 'm':
-		bi, ai := pz.st.popInt(), pz.st.popInt()
+		bi, ai := pz.stk.popInt(), pz.stk.popInt()
 		if bi != 0 {
-			pz.st.push(ai % bi)
+			pz.stk.push(ai % bi)
 		} else {
-			pz.st.push(0)
+			pz.stk.push(0)
 		}
 	case '&':
-		bi, ai := pz.st.popInt(), pz.st.popInt()
-		pz.st.push(ai & bi)
+		bi, ai := pz.stk.popInt(), pz.stk.popInt()
+		pz.stk.push(ai & bi)
 	case '|':
-		bi, ai := pz.st.popInt(), pz.st.popInt()
-		pz.st.push(ai | bi)
+		bi, ai := pz.stk.popInt(), pz.stk.popInt()
+		pz.stk.push(ai | bi)
 	case '^':
-		bi, ai := pz.st.popInt(), pz.st.popInt()
-		pz.st.push(ai ^ bi)
+		bi, ai := pz.stk.popInt(), pz.stk.popInt()
+		pz.stk.push(ai ^ bi)
 	case '~':
-		pz.st.push(pz.st.popInt() ^ -1)
+		pz.stk.push(pz.stk.popInt() ^ -1)
 	case '!':
-		pz.st.push(pz.st.popInt() != 0)
+		pz.stk.push(pz.stk.popInt() != 0)
 	case '=':
-		bi, ai := pz.st.popInt(), pz.st.popInt()
-		pz.st.push(ai == bi)
+		bi, ai := pz.stk.popInt(), pz.stk.popInt()
+		pz.stk.push(ai == bi)
 	case '>':
-		bi, ai := pz.st.popInt(), pz.st.popInt()
-		pz.st.push(ai > bi)
+		bi, ai := pz.stk.popInt(), pz.stk.popInt()
+		pz.stk.push(ai > bi)
 	case '<':
-		bi, ai := pz.st.popInt(), pz.st.popInt()
-		pz.st.push(ai < bi)
+		bi, ai := pz.stk.popInt(), pz.stk.popInt()
+		pz.stk.push(ai < bi)
 	case '?':
 	case ';':
 	case 't':
@@ -253,9 +253,9 @@ func pushParam(pz *parametizer) stateFn {
 		return nil
 	}
 	if ai := int(ch - '1'); ai >= 0 && ai < len(pz.params) {
-		pz.st.push(pz.params[ai])
+		pz.stk.push(pz.params[ai])
 	} else {
-		pz.st.push(0)
+		pz.stk.push(0)
 	}
 	// skip the '}'
 	pz.pos++
@@ -268,9 +268,9 @@ func setDSVar(pz *parametizer) stateFn {
 		return nil
 	}
 	if ch >= 'A' && ch <= 'Z' {
-		svars[int(ch-'A')] = pz.st.pop()
+		svars[int(ch-'A')] = pz.stk.pop()
 	} else if ch >= 'a' && ch <= 'z' {
-		pz.dvars[int(ch-'a')] = pz.st.pop()
+		pz.dvars[int(ch-'a')] = pz.stk.pop()
 	}
 	pz.pos++
 	return scanText
@@ -282,9 +282,9 @@ func getDSVar(pz *parametizer) stateFn {
 		return nil
 	}
 	if ch >= 'A' && ch <= 'Z' {
-		pz.st.push(svars[int(ch-'A')])
+		pz.stk.push(svars[int(ch-'A')])
 	} else if ch >= 'a' && ch <= 'z' {
-		pz.st.push(svars[int(ch-'a')])
+		pz.stk.push(svars[int(ch-'a')])
 	}
 	pz.pos++
 	return scanText
@@ -299,7 +299,7 @@ func pushInt(pz *parametizer) stateFn {
 		}
 		pz.pos++
 		if ch < '0' || ch > '9' {
-			pz.st.push(ai)
+			pz.stk.push(ai)
 			return scanText
 		}
 		ai = (ai * 10) + int(ch-'0')
@@ -308,7 +308,7 @@ func pushInt(pz *parametizer) stateFn {
 
 func scanThen(pz *parametizer) stateFn {
 	pz.pos++
-	if pz.st.popBool() {
+	if pz.stk.popBool() {
 		return scanText
 	}
 	pz.skipElse = false
