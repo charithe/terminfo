@@ -14,7 +14,7 @@ func TestOpen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("%q", ti.ExtStrings["kNXT3"])
+	t.Logf("%q", ti.ExtStrings["kUP7"])
 }
 
 var result interface{}

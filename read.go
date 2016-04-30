@@ -216,7 +216,7 @@ func (r *reader) readNumbers() {
 }
 
 // readStrings reads the string and string table sections.
-func (r *reader) readStrings() (err error) {
+func (r *reader) readStrings() error {
 	if r.h[lenStrings] >= caps.StringCount {
 		r.h[lenStrings] = caps.StringCount
 	}
@@ -235,42 +235,44 @@ func (r *reader) readStrings() (err error) {
 }
 
 func (r *reader) setExtNameTable() error {
-	// Beginning of name offsets.
-	nameOffPos := r.pos +
+	// This works because
+	// r.h[lenExtOff] == r.h[lenExtBools]+r.h[lenExtNumbers]+r.h[lenExtStrings]*2.
+	// See the check in r.read.
+	r.extNameOffPos = r.pos +
 		r.h[lenExtBools]%2 +
 		r.h[lenExtNumbers] +
-		r.h[lenExtOff] // equal to r.h[lenExtBools]+r.h[lenExtNumbers]+r.h[lenExtStrings]*2
+		r.h[lenExtOff]
 	lenNameOffs := (r.h[lenExtOff] - r.h[lenExtStrings]) * 2
 	// Find last string offset.
-	lpos, loff := nameOffPos, int16(0)
+	vpos, voff := r.extNameOffPos, int16(0)
 	for {
-		lpos -= 2
-		if lpos < r.pos {
+		vpos -= 2
+		if vpos < r.pos {
 			return ErrBadString
 		}
 		r.h[lenExtStrings]--
-		if loff = littleEndian(lpos, r.buf); loff > -1 {
+		if voff = littleEndian(vpos, r.buf); voff > -1 {
 			break
 		}
 	}
 	// Read the capability value.
-	r.extStringTable = r.buf[nameOffPos+lenNameOffs:]
-	end := indexNull(loff, r.extStringTable)
-	if end == -1 {
+	r.extStringTable = r.buf[r.extNameOffPos+lenNameOffs:]
+	vend := indexNull(voff, r.extStringTable)
+	if vend == -1 {
 		return ErrBadString
 	}
-	val := string(r.extStringTable[loff:end])
-	r.extNameTable = r.extStringTable[end+1:]
-	r.extStringTable = r.extStringTable[:loff]
-	r.extNameOffPos = lpos + lenNameOffs
-	key, err := r.nextExtName()
-	if err != nil {
-		return err
+	// The rest is the name table
+	r.extNameTable = r.extStringTable[vend+1:]
+	// Find the capability's key in the name table.
+	koff := littleEndian(vpos+lenNameOffs, r.buf)
+	kend := indexNull(koff, r.extNameTable)
+	if kend == -1 {
+		return ErrBadString
 	}
 	r.ti.ExtStrings = make(map[string]string)
-	r.ti.ExtStrings[key] = val
-	// Set extNameOffPos to the start of the name offset section.
-	r.extNameOffPos = nameOffPos
+	r.ti.ExtStrings[string(r.extNameTable[koff:kend])] = string(r.extStringTable[voff:vend])
+	// Truncate the string table to only name values.
+	r.extStringTable = r.extStringTable[:voff]
 	return nil
 }
 
