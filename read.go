@@ -124,7 +124,8 @@ func (r *reader) read(f *os.File) error {
 		return err
 	}
 	s, hl := int16(fi.Size()), r.h.lenBytes()
-	if s < hl+2 { // add 2 for the magic
+	// Add 2 extra for the magic.
+	if s < hl+2 {
 		return ErrSmallFile
 	}
 	if s > int16(cap(r.buf)) {
@@ -132,15 +133,14 @@ func (r *reader) read(f *os.File) error {
 	} else {
 		r.buf = r.buf[:s]
 	}
-	// Read entire file.
 	if _, err = io.ReadAtLeast(f, r.buf, int(s)); err != nil {
 		return err
 	}
-	// Check magic.
 	if littleEndian(0, r.buf) != magic {
 		return ErrBadHeader
 	}
-	r.pos = 2 // Skip magic.
+	// Skip magic.
+	r.pos = 2
 	if err = r.readHeader(); err != nil {
 		return err
 	}
@@ -182,7 +182,7 @@ func (r *reader) read(f *os.File) error {
 	return r.readExtStrings()
 }
 
-// readHeader reads the header.
+// readHeader reads the terminfo header.
 func (r *reader) readHeader() error {
 	hbuf := r.sliceNext(r.h.lenBytes())
 	for i := 0; i < len(r.h); i++ {
@@ -223,9 +223,9 @@ func (r *reader) readNumbers() {
 
 // readStrings reads the string and string table sections.
 func (r *reader) readStrings() error {
+	r.ti.Strings = make(map[int16]string)
 	sbuf := r.sliceNext(r.h[lenStrings] * 2)
 	table := r.sliceNext(r.h[lenTable])
-	r.ti.Strings = make(map[int16]string)
 	for i := int16(0); i < r.h[lenStrings]; i++ {
 		if off := littleEndian(i*2, sbuf); off > -1 {
 			end := indexNull(off, table)
@@ -239,9 +239,9 @@ func (r *reader) readStrings() error {
 }
 
 // setExtNameTable splits the string table into a string table and a name table.
-// This allows us to read the names and capabilities concurrently.
+// This allows us to read the capabilities and their names concurrently.
 func (r *reader) setExtNameTable() error {
-	// This works because
+	// The following works because
 	// r.h[lenExtOff] == r.h[lenExtBools]+r.h[lenExtNumbers]+r.h[lenExtStrings]*2.
 	// See the check in r.read.
 	r.extNameOffPos = r.pos +
@@ -269,7 +269,7 @@ func (r *reader) setExtNameTable() error {
 	}
 	// The rest is the name table
 	r.extNameTable = r.extStringTable[vend+1:]
-	// Find the capability's key in the name table.
+	// Find the capability's name in the name table.
 	koff := littleEndian(vpos+lenNameOffs, r.buf)
 	kend := indexNull(koff, r.extNameTable)
 	if kend == -1 {
@@ -277,9 +277,9 @@ func (r *reader) setExtNameTable() error {
 	}
 	r.ti.ExtStrings = make(map[string]string)
 	r.ti.ExtStrings[string(r.extNameTable[koff:kend])] = string(r.extStringTable[voff:vend])
-	// Truncate the string table to only values and before the last offset.
+	// Truncate the string table to only values and before the last value.
 	r.extStringTable = r.extStringTable[:voff]
-	// Truncate the name table to before the last offset.
+	// Truncate the name table to before the last name.
 	r.extNameTable = r.extNameTable[:koff]
 	return nil
 }
@@ -325,6 +325,7 @@ func (r *reader) readExtNumbers() error {
 
 // readExtStrings reads the extended string and string table sections.
 func (r *reader) readExtStrings() error {
+	// lpos is the last position.
 	for lpos := r.pos + r.h[lenExtStrings]*2; r.pos < lpos; r.pos += 2 {
 		koff, kend := r.nextExtName()
 		if kend == -1 {
