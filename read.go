@@ -276,6 +276,7 @@ func (r *reader) setExtNameTable() error {
 	return nil
 }
 
+// TODO should this always be called?
 func (r *reader) nextExtName() (string, error) {
 	off := littleEndian(r.extNameOffPos, r.buf)
 	end := indexNull(off, r.extNameTable)
