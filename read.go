@@ -18,7 +18,7 @@ var (
 )
 
 // header represents a Terminfo file's header.
-// It is only 5 shorts because we no don't need to store magic.
+// It is only 5 shorts because we don't need to store magic.
 type header [5]int16
 
 // The magic number of terminfo files.
@@ -117,6 +117,7 @@ func indexNull(off int16, buf []byte) int16 {
 	return off
 }
 
+// read reads the terminfo file from f.
 func (r *reader) read(f *os.File) error {
 	fi, err := f.Stat()
 	if err != nil {
@@ -181,6 +182,7 @@ func (r *reader) read(f *os.File) error {
 	return r.readExtStrings()
 }
 
+// readHeader reads the header.
 func (r *reader) readHeader() error {
 	hbuf := r.sliceNext(r.h.lenBytes())
 	for i := 0; i < len(r.h); i++ {
@@ -190,26 +192,26 @@ func (r *reader) readHeader() error {
 		}
 		r.h[i] = n
 	}
+	if r.h[lenBools] >= caps.BoolCount ||
+		r.h[lenNumbers] >= caps.NumberCount ||
+		r.h[lenStrings] >= caps.StringCount {
+		return ErrBadHeader
+	}
 	return nil
 }
 
-func (r *reader) readBools() error {
-	if r.h[lenBools] >= caps.BoolCount {
-		return ErrBadHeader
-	}
+// readBools reads the boolean section.
+func (r *reader) readBools() {
 	r.ti.Bools = make(map[int16]bool)
 	for i, b := range r.sliceNext(r.h[lenBools]) {
 		if b == 1 {
 			r.ti.Bools[int16(i)] = true
 		}
 	}
-	return nil
 }
 
-func (r *reader) readNumbers() error {
-	if r.h[lenNumbers] >= caps.NumberCount {
-		return ErrBadHeader
-	}
+// readNumbers reads the numeric section.
+func (r *reader) readNumbers() {
 	r.ti.Numbers = make(map[int16]int16)
 	nbuf := r.sliceNext(r.h[lenNumbers] * 2)
 	for i := int16(0); i < r.h[lenNumbers]; i++ {
@@ -217,14 +219,10 @@ func (r *reader) readNumbers() error {
 			r.ti.Numbers[i] = n
 		}
 	}
-	return nil
 }
 
 // readStrings reads the string and string table sections.
 func (r *reader) readStrings() error {
-	if r.h[lenStrings] >= caps.StringCount {
-		return ErrBadHeader
-	}
 	sbuf := r.sliceNext(r.h[lenStrings] * 2)
 	table := r.sliceNext(r.h[lenTable])
 	r.ti.Strings = make(map[int16]string)
@@ -240,6 +238,8 @@ func (r *reader) readStrings() error {
 	return nil
 }
 
+// setExtNameTable splits the string table into a string table and a name table.
+// This allows us to read the names and capabilities concurrently.
 func (r *reader) setExtNameTable() error {
 	// This works because
 	// r.h[lenExtOff] == r.h[lenExtBools]+r.h[lenExtNumbers]+r.h[lenExtStrings]*2.
@@ -284,16 +284,15 @@ func (r *reader) setExtNameTable() error {
 	return nil
 }
 
+// nextExtName gets the offset and ending of the next capability name.
 func (r *reader) nextExtName() (off, end int16) {
 	off = littleEndian(r.extNameOffPos, r.buf)
-	end = indexNull(off, r.extNameTable)
-	if end == -1 {
-		return
-	}
 	r.extNameOffPos += 2
+	end = indexNull(off, r.extNameTable)
 	return
 }
 
+// readExtBools reads the extended boolean section.
 func (r *reader) readExtBools() error {
 	r.ti.ExtBools = make(map[string]bool)
 	for _, b := range r.sliceNext(r.h[lenExtBools]) {
@@ -308,6 +307,7 @@ func (r *reader) readExtBools() error {
 	return nil
 }
 
+// readExtNumbers reads the extended numeric section.
 func (r *reader) readExtNumbers() error {
 	r.ti.ExtNumbers = make(map[string]int16)
 	nbuf := r.sliceNext(r.h[lenExtNumbers] * 2)
@@ -323,6 +323,7 @@ func (r *reader) readExtNumbers() error {
 	return nil
 }
 
+// readExtStrings reads the extended string and string table sections.
 func (r *reader) readExtStrings() error {
 	for lpos := r.pos + r.h[lenExtStrings]*2; r.pos < lpos; r.pos += 2 {
 		koff, kend := r.nextExtName()
