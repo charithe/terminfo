@@ -10,7 +10,6 @@ import (
 	"github.com/nhooyr/terminfo/caps"
 )
 
-// TODO better errors
 var (
 	ErrSmallFile  = errors.New("terminfo: file too small")
 	ErrBadString  = errors.New("terminfo: bad string")
@@ -91,7 +90,7 @@ var readerPool = sync.Pool{
 	},
 }
 
-// sliceNext slices the next off bytesof r.buf.
+// sliceNext slices the next off bytes of r.buf.
 // It also increments r.pos by off.
 func (r *reader) sliceNext(off int16) []byte {
 	// Just use off as ppos.
@@ -109,22 +108,19 @@ func (r *reader) evenBoundary() {
 
 // indexNull returns the position of the next null byte in buf.
 // It is used to find the end of null terminated strings.
-func indexNull(off int16, buf []byte) (int16, error) {
-	for pos := off; ; pos++ {
+func indexNull(off int16, buf []byte) (pos int16) {
+	for pos = off; buf[pos] != 0; pos++ {
 		if pos >= int16(len(buf)) {
-			return 0, ErrBadString
-		}
-		if buf[pos] == 0 {
-			return pos, nil
+			return -1
 		}
 	}
+	return
 }
 
-// TODO read ncurses and find more sanity checks
-func (r *reader) read(f *os.File) (err error) {
+func (r *reader) read(f *os.File) error {
 	fi, err := f.Stat()
 	if err != nil {
-		return
+		return err
 	}
 	s, hl := int16(fi.Size()), r.h.lenBytes()
 	if s < hl+2 { // add 2 for the magic
@@ -136,7 +132,7 @@ func (r *reader) read(f *os.File) (err error) {
 		r.buf = r.buf[:s]
 	}
 	if _, err = io.ReadAtLeast(f, r.buf, int(s)); err != nil {
-		return
+		return err
 	}
 	// Check magic.
 	if littleEndian(0, r.buf) != magic {
@@ -144,7 +140,7 @@ func (r *reader) read(f *os.File) (err error) {
 	}
 	r.pos = 2 // Skip magic.
 	if err = r.readHeader(); err != nil {
-		return
+		return err
 	}
 	if s-r.pos < r.h.lenCaps() {
 		return ErrSmallFile
@@ -155,7 +151,7 @@ func (r *reader) read(f *os.File) (err error) {
 	r.evenBoundary()
 	r.readNumbers()
 	if err = r.readStrings(); err != nil || s <= r.pos {
-		return
+		return err
 	}
 	// We have extended capabilities.
 	r.evenBoundary()
@@ -163,7 +159,7 @@ func (r *reader) read(f *os.File) (err error) {
 		return ErrSmallFile
 	}
 	if err = r.readHeader(); err != nil {
-		return
+		return err
 	}
 	if r.h[lenExtBools]+r.h[lenExtNumbers]+r.h[lenExtStrings]*2 != r.h[lenExtOff] {
 		return ErrBadHeader
@@ -172,14 +168,14 @@ func (r *reader) read(f *os.File) (err error) {
 		return ErrSmallFile
 	}
 	if err = r.setExtNameTable(); err != nil {
-		return
+		return err
 	}
 	if err = r.readExtBools(); err != nil {
-		return
+		return err
 	}
 	r.evenBoundary()
 	if err = r.readExtNumbers(); err != nil {
-		return
+		return err
 	}
 	return r.readExtStrings()
 }
@@ -220,7 +216,7 @@ func (r *reader) readNumbers() {
 }
 
 // readStrings reads the string and string table sections.
-func (r *reader) readStrings() error {
+func (r *reader) readStrings() (err error) {
 	if r.h[lenStrings] >= caps.StringCount {
 		r.h[lenStrings] = caps.StringCount
 	}
@@ -228,9 +224,9 @@ func (r *reader) readStrings() error {
 	table := r.sliceNext(r.h[lenTable])
 	for i := int16(0); i < r.h[lenStrings]; i++ {
 		if off := littleEndian(i*2, sbuf); off > -1 {
-			end, err := indexNull(off, table)
-			if err != nil {
-				return err
+			end := indexNull(off, table)
+			if end == -1 {
+				return ErrBadString
 			}
 			r.ti.Strings[i] = string(table[off:end])
 		}
@@ -259,9 +255,9 @@ func (r *reader) setExtNameTable() error {
 	}
 	// Read the capability value.
 	r.extStringTable = r.buf[nameOffPos+lenNameOffs:]
-	end, err := indexNull(loff, r.extStringTable)
-	if err != nil {
-		return err
+	end := indexNull(loff, r.extStringTable)
+	if end == -1 {
+		return ErrBadString
 	}
 	val := string(r.extStringTable[loff:end])
 	r.extNameTable = r.extStringTable[end+1:]
@@ -269,8 +265,7 @@ func (r *reader) setExtNameTable() error {
 	r.extNameOffPos = lpos + lenNameOffs
 	key, err := r.nextExtName()
 	if err != nil {
-		// TODO error?
-		return ErrBadString
+		return err
 	}
 	r.ti.ExtStrings = make(map[string]string)
 	r.ti.ExtStrings[key] = val
@@ -281,15 +276,15 @@ func (r *reader) setExtNameTable() error {
 
 func (r *reader) nextExtName() (string, error) {
 	off := littleEndian(r.extNameOffPos, r.buf)
-	end, err := indexNull(off, r.extNameTable)
-	if err != nil {
-		return "", err
+	end := indexNull(off, r.extNameTable)
+	if end == -1 {
+		return "", ErrBadString
 	}
 	r.extNameOffPos += 2
 	return string(r.extNameTable[off:end]), nil
 }
 
-func (r *reader) readExtBools() (err error) {
+func (r *reader) readExtBools() error {
 	r.ti.ExtBools = make(map[string]bool)
 	for _, b := range r.sliceNext(r.h[lenExtBools]) {
 		if b == 1 {
@@ -303,7 +298,7 @@ func (r *reader) readExtBools() (err error) {
 	return nil
 }
 
-func (r *reader) readExtNumbers() (err error) {
+func (r *reader) readExtNumbers() error {
 	r.ti.ExtNumbers = make(map[string]int16)
 	nbuf := r.sliceNext(r.h[lenExtNumbers] * 2)
 	for i := int16(0); i < r.h[lenExtNumbers]; i++ {
@@ -318,12 +313,12 @@ func (r *reader) readExtNumbers() (err error) {
 	return nil
 }
 
-func (r *reader) readExtStrings() (err error) {
+func (r *reader) readExtStrings() error {
 	for lpos := r.pos + r.h[lenExtStrings]*2; r.pos < lpos; r.pos += 2 {
 		if off := littleEndian(r.pos, r.buf); off > -1 {
-			end, err := indexNull(off, r.extStringTable)
-			if err != nil {
-				return err
+			end := indexNull(off, r.extStringTable)
+			if end == -1 {
+				return ErrBadString
 			}
 			key, err := r.nextExtName()
 			if err != nil {
