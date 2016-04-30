@@ -108,13 +108,13 @@ func (r *reader) evenBoundary() {
 
 // indexNull returns the position of the next null byte in buf.
 // It is used to find the end of null terminated strings.
-func indexNull(off int16, buf []byte) (pos int16) {
-	for pos = off; buf[pos] != 0; pos++ {
-		if pos >= int16(len(buf)) {
+func indexNull(off int16, buf []byte) int16 {
+	for ; buf[off] != 0; off++ {
+		if off >= int16(len(buf)) {
 			return -1
 		}
 	}
-	return
+	return off
 }
 
 func (r *reader) read(f *os.File) error {
