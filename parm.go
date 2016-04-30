@@ -91,7 +91,7 @@ func (pz *parametizer) free() {
 	parametizerPool.Put(pz)
 }
 
-// Parm evaluates a terminfo parameterized string, such as cap.SetAForeground,
+// Parm evaluates a terminfo parameterized string, such as caps.SetAForeground,
 // and returns the result.
 func Parm(s string, p ...interface{}) string {
 	pz := getParametizer(s)
