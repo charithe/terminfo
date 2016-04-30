@@ -285,25 +285,25 @@ func (r *reader) setExtNameTable() error {
 }
 
 // TODO should this always be called?
-func (r *reader) nextExtName() (string, error) {
-	off := littleEndian(r.extNameOffPos, r.buf)
-	end := indexNull(off, r.extNameTable)
+func (r *reader) nextExtName() (off, end int16) {
+	off = littleEndian(r.extNameOffPos, r.buf)
+	end = indexNull(off, r.extNameTable)
 	if end == -1 {
-		return "", ErrBadString
+		return
 	}
 	r.extNameOffPos += 2
-	return string(r.extNameTable[off:end]), nil
+	return
 }
 
 func (r *reader) readExtBools() error {
 	r.ti.ExtBools = make(map[string]bool)
 	for _, b := range r.sliceNext(r.h[lenExtBools]) {
-		key, err := r.nextExtName()
-		if err != nil {
-			return err
+		off, end := r.nextExtName()
+		if end == -1 {
+			return ErrBadString
 		}
 		if b == 1 {
-			r.ti.ExtBools[key] = true
+			r.ti.ExtBools[string(r.extNameTable[off:end])] = true
 		}
 	}
 	return nil
@@ -313,12 +313,12 @@ func (r *reader) readExtNumbers() error {
 	r.ti.ExtNumbers = make(map[string]int16)
 	nbuf := r.sliceNext(r.h[lenExtNumbers] * 2)
 	for i := int16(0); i < r.h[lenExtNumbers]; i++ {
-		key, err := r.nextExtName()
-		if err != nil {
-			return err
+		off, end := r.nextExtName()
+		if end == -1 {
+			return ErrBadString
 		}
 		if n := littleEndian(i*2, nbuf); n > -1 {
-			r.ti.ExtNumbers[key] = n
+			r.ti.ExtNumbers[string(r.extNameTable[off:end])] = n
 		}
 	}
 	return nil
@@ -326,16 +326,16 @@ func (r *reader) readExtNumbers() error {
 
 func (r *reader) readExtStrings() error {
 	for lpos := r.pos + r.h[lenExtStrings]*2; r.pos < lpos; r.pos += 2 {
-		key, err := r.nextExtName()
-		if err != nil {
-			return err
+		koff, kend := r.nextExtName()
+		if kend == -1 {
+			return ErrBadString
 		}
-		if off := littleEndian(r.pos, r.buf); off > -1 {
-			end := indexNull(off, r.extStringTable)
-			if end == -1 {
+		if voff := littleEndian(r.pos, r.buf); voff > -1 {
+			vend := indexNull(voff, r.extStringTable)
+			if vend == -1 {
 				return ErrBadString
 			}
-			r.ti.ExtStrings[key] = string(r.extStringTable[off:end])
+			r.ti.ExtStrings[string(r.extNameTable[koff:kend])] = string(r.extStringTable[voff:vend])
 		}
 	}
 	return nil
