@@ -73,16 +73,15 @@ func Load(name string) (ti *Terminfo, err error) {
 // openDir reads the Terminfo file specified by the dir and name.
 func openDir(dir, name string) (*Terminfo, error) {
 	// Try typical *nix path.
-	f, err := ioutil.ReadFile(dir + "/" + name[0:1] + "/" + name)
+	b, err := ioutil.ReadFile(dir + "/" + name[0:1] + "/" + name)
 	if err != nil {
 		// Fallback to the darwin specific path.
-		f, err = ioutil.ReadFile(dir + "/" + strconv.FormatUint(uint64(name[0]), 16) + "/" + name)
+		b, err = ioutil.ReadFile(dir + "/" + strconv.FormatUint(uint64(name[0]), 16) + "/" + name)
 		if err != nil {
 			return nil, err
 		}
 	}
-	r := new(decoder)
-	r.buf = f
+	r := &decoder{buf: b}
 	if err = r.unmarshal(); err != nil {
 		return nil, err
 	}
