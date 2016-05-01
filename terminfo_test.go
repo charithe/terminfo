@@ -35,12 +35,8 @@ func BenchmarkTiParm(b *testing.B) {
 		b.Fatal(err)
 	}
 	var r string
-	v, ok := ti.Strings[caps.SetAForeground]
-	if !ok {
-		b.Fatal("Absent Capability")
-	}
 	for i := 0; i < b.N; i++ {
-		r = terminfo.Parm(v, 7, 5)
+		r = terminfo.Parm(ti.Strings[caps.SetAForeground], 7, 5)
 	}
 	result = r
 }
