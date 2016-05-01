@@ -8,7 +8,7 @@ import (
 )
 
 func TestOpen(t *testing.T) {
-	ti, err := terminfo.OpenEnv()
+	ti, err := terminfo.LoadEnv()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -21,7 +21,7 @@ func BenchmarkOpen(b *testing.B) {
 	var r *terminfo.Terminfo
 	var err error
 	for i := 0; i < b.N; i++ {
-		r, err = terminfo.OpenEnv()
+		r, err = terminfo.LoadEnv()
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -30,7 +30,7 @@ func BenchmarkOpen(b *testing.B) {
 }
 
 func BenchmarkTiParm(b *testing.B) {
-	ti, err := terminfo.OpenEnv()
+	ti, err := terminfo.LoadEnv()
 	if err != nil {
 		b.Fatal(err)
 	}

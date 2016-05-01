@@ -27,16 +27,16 @@ var (
 	dbMutex = new(sync.RWMutex)
 )
 
-// OpenEnv calls Open with the name as $TERM.
-func OpenEnv() (*Terminfo, error) {
-	return Open(os.Getenv("TERM"))
+// LoadEnv calls Load with the name as $TERM.
+func LoadEnv() (*Terminfo, error) {
+	return Load(os.Getenv("TERM"))
 }
 
 var ErrEmptyTerm = errors.New("terminfo: empty term name")
 
-// Open follows the behavior described in terminfo(5) to find correct the terminfo file
-// using the name and then returns a Terminfo struct that describes the file.
-func Open(name string) (ti *Terminfo, err error) {
+// Load follows the behavior described in terminfo(5) to find correct the terminfo file
+// using the name, reads the file and then returns a Terminfo struct that describes the file.
+func Load(name string) (ti *Terminfo, err error) {
 	if name == "" {
 		return nil, ErrEmptyTerm
 	}
