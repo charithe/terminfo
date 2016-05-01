@@ -186,17 +186,15 @@ func (r *reader) readHeader() error {
 
 // readBools reads the boolean section.
 func (r *reader) readBools() {
-	r.ti.Bools = make(map[int16]bool)
 	for i, b := range r.sliceNext(r.h[lenBools]) {
 		if b == 1 {
-			r.ti.Bools[int16(i)] = true
+			r.ti.Bools[i] = true
 		}
 	}
 }
 
 // readNumbers reads the numeric section.
 func (r *reader) readNumbers() {
-	r.ti.Numbers = make(map[int16]int16)
 	nbuf := r.sliceNext(r.h[lenNumbers] * 2)
 	for i := int16(0); i < r.h[lenNumbers]; i++ {
 		if n := littleEndian(i*2, nbuf); n > -1 {
@@ -207,7 +205,6 @@ func (r *reader) readNumbers() {
 
 // readStrings reads the string and string table sections.
 func (r *reader) readStrings() error {
-	r.ti.Strings = make(map[int16]string)
 	sbuf := r.sliceNext(r.h[lenStrings] * 2)
 	table := r.sliceNext(r.h[lenTable])
 	for i := int16(0); i < r.h[lenStrings]; i++ {

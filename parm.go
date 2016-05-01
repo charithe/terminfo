@@ -435,5 +435,5 @@ func (stk *stack) popString() string {
 }
 
 func (stk *stack) reset() {
-	pz.stk = pz.stk[:0]
+	*stk = (*stk)[:0]
 }

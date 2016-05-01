@@ -13,9 +13,9 @@ import (
 // Terminfo describes a terminal's capabilities.
 type Terminfo struct {
 	Names      []string
-	Bools      map[int16]bool
-	Numbers    map[int16]int16
-	Strings    map[int16]string
+	Bools      [caps.BoolCount]bool
+	Numbers    [caps.NumberCount]int16
+	Strings    [caps.StringCount]string
 	ExtBools   map[string]bool
 	ExtNumbers map[string]int16
 	ExtStrings map[string]string
