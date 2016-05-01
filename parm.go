@@ -219,7 +219,7 @@ func scanCode(pz *parametizer) stateFn {
 	case '~':
 		pz.stk.push(^pz.stk.popInt())
 	case 'i':
-		for i, _ := range pz.params[:2] {
+		for i := range pz.params[:2] {
 			if n, ok := pz.params[i].(int); ok {
 				pz.params[i] = n + 1
 			}
