@@ -7,7 +7,7 @@ import (
 	"github.com/nhooyr/terminfo/caps"
 )
 
-// Decoding errors.
+// These are the decoding errors.
 var (
 	ErrSmallFile  = errors.New("terminfo: file too small")
 	ErrBadString  = errors.New("terminfo: bad string")

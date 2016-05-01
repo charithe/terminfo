@@ -33,7 +33,7 @@ func LoadEnv() (*Terminfo, error) {
 	return Load(os.Getenv("TERM"))
 }
 
-// ErrEmptyTerm is returned when no name is provided to Load.
+// Returned when no name is provided to Load.
 var ErrEmptyTerm = errors.New("terminfo: empty term name")
 
 // Load follows the behavior described in terminfo(5) to find correct the terminfo file
