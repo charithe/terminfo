@@ -66,11 +66,6 @@ func (h header) lenBytes() int16 {
 	return int16(len(h) * 2)
 }
 
-// littleEndian decodes a short starting at i in buf using little-endian byte order.
-func littleEndian(i int16, buf []byte) int16 {
-	return int16(buf[i+1])<<8 | int16(buf[i])
-}
-
 type reader struct {
 	pos            int16
 	extNameOffPos  int16 // position in the name offsets
@@ -104,17 +99,6 @@ func (r *reader) evenBoundary() {
 	if r.pos%2 == 1 {
 		r.pos++
 	}
-}
-
-// indexNull returns the position of the next null byte in buf.
-// It is used to find the end of null terminated strings.
-func indexNull(off int16, buf []byte) int16 {
-	for ; buf[off] != 0; off++ {
-		if off >= int16(len(buf)) {
-			return -1
-		}
-	}
-	return off
 }
 
 // read reads the terminfo file from f.
@@ -340,4 +324,20 @@ func (r *reader) readExtStrings() error {
 		}
 	}
 	return nil
+}
+
+// littleEndian decodes a short starting at i in buf using little-endian byte order.
+func littleEndian(i int16, buf []byte) int16 {
+	return int16(buf[i+1])<<8 | int16(buf[i])
+}
+
+// indexNull returns the position of the next null byte in buf.
+// It is used to find the end of null terminated strings.
+func indexNull(off int16, buf []byte) int16 {
+	for ; buf[off] != 0; off++ {
+		if off >= int16(len(buf)) {
+			return -1
+		}
+	}
+	return off
 }

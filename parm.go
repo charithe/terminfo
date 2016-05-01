@@ -43,7 +43,7 @@ func getParametizer(s string) *parametizer {
 func (pz *parametizer) free() {
 	pz.pos = 0
 	pz.nest = 0
-	pz.stk = pz.stk[:0]
+	pz.stk.reset()
 	pz.buf.Reset()
 	pz.params = [9]interface{}{}
 	pz.dvars = [26]interface{}{}
@@ -432,4 +432,8 @@ func (stk *stack) popString() string {
 		return as
 	}
 	return ""
+}
+
+func (stk *stack) reset() {
+	pz.stk = pz.stk[:0]
 }
