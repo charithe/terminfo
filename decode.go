@@ -18,7 +18,7 @@ var (
 // decoder represents the state while decoding a terminfo file.
 type decoder struct {
 	pos            int16
-	extNameOffPos  int16 // position in the name offsets
+	posExtNameOffs int16 // position in the name offsets
 	h              header
 	buf            []byte
 	extStringTable []byte
@@ -154,10 +154,10 @@ func (d *decoder) unmarshalStrings() error {
 // setExtNameTable splits the string table into a string table and a name table.
 // This allows us to unmarshal the capabilities and their names concurrently.
 func (d *decoder) setExtNameTable() error {
-	d.extNameOffPos = d.pos + d.h.extNameOffsOff()
-	lenExtNameOffs := d.h.lenExtNameOffs()
+	d.posExtNameOffs = d.pos + d.h.extNameOffsOff()
+	lenExtNameOffs := (d.h[lenExtOff] - d.h[lenExtStrings]) * 2
 	// Find last string offset.
-	vpos := d.extNameOffPos
+	vpos := d.posExtNameOffs
 	var voff int16
 	for {
 		vpos -= 2
@@ -170,7 +170,7 @@ func (d *decoder) setExtNameTable() error {
 		}
 	}
 	// Unmarshal the capability value.
-	d.extStringTable = d.buf[d.extNameOffPos+lenExtNameOffs:]
+	d.extStringTable = d.buf[d.posExtNameOffs+lenExtNameOffs:]
 	vend := indexNull(voff, d.extStringTable)
 	if vend == -1 {
 		return ErrBadString
@@ -193,8 +193,8 @@ func (d *decoder) setExtNameTable() error {
 
 // nextExtName returns the offset and ending of the next capability name.
 func (d *decoder) nextExtName() (off, end int16) {
-	off = littleEndian(d.extNameOffPos, d.buf)
-	d.extNameOffPos += 2
+	off = littleEndian(d.posExtNameOffs, d.buf)
+	d.posExtNameOffs += 2
 	end = indexNull(off, d.extNameTable)
 	return
 }
@@ -339,9 +339,4 @@ func (h header) extNameOffsOff() int16 {
 	return h[lenExtBools]%2 +
 		h[lenExtNumbers] +
 		h[lenExtOff]
-}
-
-// lenExtNameOffs returns the length of the name offsets.
-func (h header) lenExtNameOffs() int16 {
-	return (h[lenExtOff] - h[lenExtStrings]) * 2
 }
