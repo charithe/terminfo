@@ -9,49 +9,6 @@ import (
 	"sync"
 )
 
-type stack []interface{}
-
-func (stk *stack) push(v interface{}) {
-	*stk = append(*stk, v)
-}
-
-func (stk *stack) pop() interface{} {
-	if len(*stk) == 0 {
-		return nil
-	}
-	v := (*stk)[len(*stk)-1]
-	*stk = (*stk)[:len(*stk)-1]
-	return v
-}
-
-func (stk *stack) popInt() int {
-	if ai, ok := stk.pop().(int); ok {
-		return ai
-	}
-	return 0
-}
-
-func (stk *stack) popBool() bool {
-	if ab, ok := stk.pop().(bool); ok {
-		return ab
-	}
-	return false
-}
-
-func (stk *stack) popByte() byte {
-	if ab, ok := stk.pop().(byte); ok {
-		return ab
-	}
-	return 0
-}
-
-func (stk *stack) popString() string {
-	if as, ok := stk.pop().(string); ok {
-		return as
-	}
-	return ""
-}
-
 // parametizer represents the scanners state.
 type parametizer struct {
 	s        string          // terminfo string
@@ -432,4 +389,47 @@ func skipElse(pz *parametizer) stateFn {
 		pz.nest++
 	}
 	return skipText
+}
+
+type stack []interface{}
+
+func (stk *stack) push(v interface{}) {
+	*stk = append(*stk, v)
+}
+
+func (stk *stack) pop() interface{} {
+	if len(*stk) == 0 {
+		return nil
+	}
+	v := (*stk)[len(*stk)-1]
+	*stk = (*stk)[:len(*stk)-1]
+	return v
+}
+
+func (stk *stack) popInt() int {
+	if ai, ok := stk.pop().(int); ok {
+		return ai
+	}
+	return 0
+}
+
+func (stk *stack) popBool() bool {
+	if ab, ok := stk.pop().(bool); ok {
+		return ab
+	}
+	return false
+}
+
+func (stk *stack) popByte() byte {
+	if ab, ok := stk.pop().(byte); ok {
+		return ab
+	}
+	return 0
+}
+
+func (stk *stack) popString() string {
+	if as, ok := stk.pop().(string); ok {
+		return as
+	}
+	return ""
 }
