@@ -66,6 +66,7 @@ func (h header) lenBytes() int16 {
 	return int16(len(h) * 2)
 }
 
+// TODO rename unmarshaller or decoder?
 type reader struct {
 	pos            int16
 	extNameOffPos  int16 // position in the name offsets
@@ -76,6 +77,7 @@ type reader struct {
 	ti             *Terminfo
 }
 
+// TODO is this a premature optimization?
 var readerPool = sync.Pool{
 	New: func() interface{} {
 		r := new(reader)

@@ -81,7 +81,6 @@ func openDir(dir, name string) (*Terminfo, error) {
 		}
 	}
 	r := readerPool.Get().(*reader)
-	defer readerPool.Put(r)
 	if err = r.read(f); err != nil {
 		return nil, err
 	}

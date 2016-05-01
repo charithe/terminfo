@@ -8,7 +8,7 @@ import (
 )
 
 func TestOpen(t *testing.T) {
-	ti, err := terminfo.LoadEnv()
+	ti, err := terminfo.Load("xterm")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,6 +41,7 @@ func BenchmarkTiParm(b *testing.B) {
 	result = r
 }
 
+// TODO somehow there are 6 allocations/op?
 func BenchmarkParm(b *testing.B) {
 	var r string
 	for i := 0; i < b.N; i++ {
