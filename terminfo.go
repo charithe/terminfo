@@ -109,10 +109,15 @@ func (ti *Terminfo) Color(fg, bg int) (rv string) {
 		}
 	}
 	if maxColors > fg && fg >= 0 {
-		rv += Parm(ti.Strings[caps.SetAForeground], fg)
+		rv += ti.Parm(caps.SetAForeground, fg)
 	}
 	if maxColors > bg && bg >= 0 {
-		rv += Parm(ti.Strings[caps.SetABackground], bg)
+		rv += ti.Parm(caps.SetABackground, bg)
 	}
 	return
+}
+
+// Parm is a thin wrapper around the function Parm.
+func (ti *Terminfo) Parm(i int, p ...interface{}) string {
+	return Parm(ti.Strings[i], p...)
 }

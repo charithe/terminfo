@@ -36,7 +36,7 @@ func BenchmarkTiParm(b *testing.B) {
 	}
 	var r string
 	for i := 0; i < b.N; i++ {
-		r = terminfo.Parm(ti.Strings[caps.SetAForeground], 7, 5)
+		r = ti.Parm(caps.SetAForeground, 7, 5)
 	}
 	result = r
 }
