@@ -2,6 +2,7 @@ package terminfo
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"strconv"
 	"sync"
@@ -159,14 +160,37 @@ func scanCode(pz *parametizer) stateFn {
 	case 'i':
 		pz.params[0] = pz.params[0].(int) + 1
 		pz.params[1] = pz.params[1].(int) + 1
-	case 'c':
-		pz.buf.WriteByte(pz.stk.popByte())
-	case 's':
-		pz.buf.WriteString(pz.stk.popString())
 	case 'd':
+		// This could be part of the extended format below, but it is much faster like this.
 		pz.buf.WriteString(strconv.Itoa(pz.stk.popInt()))
 	case ':':
-		// TODO implement
+		pz.pos++
+		ch, err = pz.get()
+		if err != nil {
+			return nil
+		}
+		fallthrough
+	case '#', ' ', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '.', 'o', 'x', 'X', 's':
+		f := "%" + string(ch)
+	LOOP:
+		for {
+			pz.pos++
+			ch, err = pz.get()
+			if err != nil {
+				return nil
+			}
+			f += string(ch)
+			switch ch {
+			case 'o', 'd', 'x', 'X':
+				fmt.Fprintf(pz.buf, f, pz.stk.popInt())
+				break LOOP
+			case 's':
+				fmt.Fprintf(pz.buf, f, pz.stk.popString())
+				break LOOP
+			case 'c':
+				fmt.Fprintf(pz.buf, f, pz.stk.popByte())
+			}
+		}
 	case 'p':
 		pz.pos++
 		return pushParam

@@ -20,7 +20,7 @@ func TestOpen(t *testing.T) {
 }
 
 func TestParm(t *testing.T) {
-	t.Logf("%q", terminfo.Parm("%p1% d", 343))
+	t.Logf("%q", terminfo.Parm("%p1%:-9d %p2%d", 343, 4343))
 }
 
 var result interface{}
