@@ -10,11 +10,6 @@ import (
 	"github.com/nhooyr/terminfo/caps"
 )
 
-var (
-	ErrEmptyTerm = errors.New("terminfo: empty term name")
-	ErrAbsentCap = errors.New("terminfo: absent capability")
-)
-
 // Terminfo describes a terminal's capabilities.
 type Terminfo struct {
 	Names      []string
@@ -37,6 +32,7 @@ func OpenEnv() (*Terminfo, error) {
 	return Open(os.Getenv("TERM"))
 }
 
+var ErrEmptyTerm = errors.New("terminfo: empty term name")
 
 // Open follows the behavior described in terminfo(5) to find correct the terminfo file
 // using the name and then returns a Terminfo struct that describes the file.
@@ -96,13 +92,6 @@ func openDir(dir, name string) (*Terminfo, error) {
 	}
 	dbMutex.Unlock()
 	return r.ti, nil
-}
-
-func (ti *Terminfo) Parm(i int16, p ...interface{}) (string, error) {
-	if s, ok := ti.Strings[i]; ok {
-		return Parm(s, p...), nil
-	}
-	return "", ErrAbsentCap
 }
 
 func (ti *Terminfo) Color(fg, bg int) (rv string) {

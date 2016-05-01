@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -157,40 +158,35 @@ func scanCode(pz *parametizer) stateFn {
 	switch ch {
 	case '%':
 		pz.buf.WriteByte('%')
-	case 'i':
-		pz.params[0] = pz.params[0].(int) + 1
-		pz.params[1] = pz.params[1].(int) + 1
-	case 'd':
-		// This could be part of the extended format below, but it is much faster like this.
-		pz.buf.WriteString(strconv.Itoa(pz.stk.popInt()))
 	case ':':
+		// This character is used to avoid interpreting "%-" and "%+" as operators.
+		// The next character is where the format really begins.
 		pz.pos++
 		ch, err = pz.get()
 		if err != nil {
 			return nil
 		}
 		fallthrough
-	case '#', ' ', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '.', 'o', 'x', 'X', 's':
-		f := "%" + string(ch)
-	LOOP:
-		for {
-			pz.pos++
-			ch, err = pz.get()
-			if err != nil {
-				return nil
-			}
-			f += string(ch)
-			switch ch {
-			case 'o', 'd', 'x', 'X':
-				fmt.Fprintf(pz.buf, f, pz.stk.popInt())
-				break LOOP
-			case 's':
-				fmt.Fprintf(pz.buf, f, pz.stk.popString())
-				break LOOP
-			case 'c':
-				fmt.Fprintf(pz.buf, f, pz.stk.popByte())
-			}
-		}
+	case '#', ' ', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '.':
+		return scanFormat
+	case 'o':
+		// Special cased from scanFormat for performance.
+		pz.buf.WriteString(strconv.FormatInt(int64(pz.stk.popInt()), 8))
+	case 'd':
+		// Special cased from scanFormat for performance.
+		pz.buf.WriteString(strconv.Itoa(pz.stk.popInt()))
+	case 'x':
+		// Special cased from scanFormat for performance.
+		pz.buf.WriteString(strconv.FormatInt(int64(pz.stk.popInt()), 16))
+	case 'X':
+		// Special cased from scanFormat for performance.
+		pz.buf.WriteString(strings.ToUpper(strconv.FormatInt(int64(pz.stk.popInt()), 16)))
+	case 's':
+		// Special cased from scanFormat for performance.
+		pz.buf.WriteString(pz.stk.popString())
+	case 'c':
+		// Special cased from scanFormat for performance.
+		pz.buf.WriteByte(pz.stk.popByte())
 	case 'p':
 		pz.pos++
 		return pushParam
@@ -246,10 +242,6 @@ func scanCode(pz *parametizer) stateFn {
 	case '^':
 		bi, ai := pz.stk.popInt(), pz.stk.popInt()
 		pz.stk.push(ai ^ bi)
-	case '~':
-		pz.stk.push(pz.stk.popInt() ^ -1)
-	case '!':
-		pz.stk.push(pz.stk.popInt() != 0)
 	case '=':
 		bi, ai := pz.stk.popInt(), pz.stk.popInt()
 		pz.stk.push(ai == bi)
@@ -259,13 +251,59 @@ func scanCode(pz *parametizer) stateFn {
 	case '<':
 		bi, ai := pz.stk.popInt(), pz.stk.popInt()
 		pz.stk.push(ai < bi)
-	case '?':
-	case ';':
+	case 'A':
+		bi, ai := pz.stk.popBool(), pz.stk.popBool()
+		pz.stk.push(ai && bi)
+	case 'O':
+		bi, ai := pz.stk.popBool(), pz.stk.popBool()
+		pz.stk.push(ai || bi)
+	case '!':
+		pz.stk.push(!pz.stk.popBool())
+	case '~':
+		pz.stk.push(^pz.stk.popInt())
+	case 'i':
+		for i, _ := range pz.params[:2] {
+			if n, ok := pz.params[i].(int); ok {
+				pz.params[i] = n + 1
+			}
+		}
+	case '?', ';':
 	case 't':
 		return scanThen
 	case 'e':
 		pz.skipElse = true
 		return skipText
+	}
+	pz.pos++
+	return scanText
+}
+
+func scanFormat(pz *parametizer) stateFn {
+	// The character was already read, so no need to check the error.
+	ch, _ := pz.get()
+	// 6 should be the maximum size of a format string, for example "%:-9.9d".
+	f := make([]byte, 2, 6)
+	f[0], f[1] = '%', ch
+	var err error
+LOOP:
+	for {
+		pz.pos++
+		ch, err = pz.get()
+		if err != nil {
+			return nil
+		}
+		f = append(f, ch)
+		switch ch {
+		case 'o', 'd', 'x', 'X':
+			fmt.Fprintf(pz.buf, string(f), pz.stk.popInt())
+			break LOOP
+		case 's':
+			fmt.Fprintf(pz.buf, string(f), pz.stk.popString())
+			break LOOP
+		case 'c':
+			fmt.Fprintf(pz.buf, string(f), pz.stk.popByte())
+			break LOOP
+		}
 	}
 	pz.pos++
 	return scanText

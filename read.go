@@ -147,6 +147,11 @@ func (r *reader) read(f *os.File) error {
 	if s-r.pos < r.h.lenCaps() {
 		return ErrSmallFile
 	}
+	if r.h[lenBools] > caps.BoolCount ||
+		r.h[lenNumbers] > caps.NumberCount ||
+		r.h[lenStrings] > caps.StringCount {
+		return ErrBadHeader
+	}
 	r.ti = new(Terminfo)
 	r.ti.Names = strings.Split(string(r.sliceNext(r.h[lenNames])), "|")
 	r.readBools()
@@ -191,11 +196,6 @@ func (r *reader) readHeader() error {
 			return ErrBadHeader
 		}
 		r.h[i] = n
-	}
-	if r.h[lenBools] >= caps.BoolCount ||
-		r.h[lenNumbers] >= caps.NumberCount ||
-		r.h[lenStrings] >= caps.StringCount {
-		return ErrBadHeader
 	}
 	return nil
 }
