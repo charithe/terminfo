@@ -2,6 +2,7 @@ package terminfo
 
 import (
 	"errors"
+	"io"
 	"io/ioutil"
 	"os"
 	"strconv"
@@ -120,4 +121,53 @@ func (ti *Terminfo) Color(fg, bg int) (rv string) {
 // Parm is a thin wrapper around the function Parm.
 func (ti *Terminfo) Parm(i int, p ...interface{}) string {
 	return Parm(ti.Strings[i], p...)
+}
+
+// TODO undestand this
+func (ti *Terminfo) TPuts(w io.Writer, s string, baud int) {
+	for {
+		start := strings.Index(s, "$<")
+		if start == -1 {
+			// Most strings don't need padding, which is good news!
+			io.WriteString(w, s)
+			return
+		}
+		io.WriteString(w, s[:start])
+		s = s[start+2:]
+		end := strings.Index(s, ">")
+		if end == -1 {
+			// Unterminated... just emit bytes unadulterated.
+			io.WriteString(w, "$<"+s)
+			return
+		}
+		val := s[:end]
+		s = s[end+1:]
+		padus := 0
+		unit := 1000
+		dot := false
+	LOOP:
+		for i := range val {
+			switch val[i] {
+			case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+				padus *= 10
+				padus += int(val[i] - '0')
+				if dot {
+					unit *= 10
+				}
+			case '.':
+				if !dot {
+					dot = true
+				} else {
+					break LOOP
+				}
+			default:
+				break LOOP
+			}
+		}
+		cnt := int(((baud / 8) * padus) / unit)
+		for cnt > 0 {
+			io.WriteString(w, ti.Strings[caps.PadChar])
+			cnt--
+		}
+	}
 }

@@ -32,8 +32,8 @@ var parametizerPool = sync.Pool{
 	},
 }
 
-// getparametizer returns a new initialized parametizer from the pool.
-func getParametizer(s string) *parametizer {
+// newParametizer returns a new initialized parametizer from the pool.
+func newParametizer(s string) *parametizer {
 	pz := parametizerPool.Get().(*parametizer)
 	pz.s = s
 	return pz
@@ -53,7 +53,7 @@ func (pz *parametizer) free() {
 // Parm evaluates a terminfo parameterized string, such as caps.SetAForeground,
 // and returns the result.
 func Parm(s string, p ...interface{}) string {
-	pz := getParametizer(s)
+	pz := newParametizer(s)
 	defer pz.free()
 	// make sure we always have 9 parameters -- makes it easier
 	// later to skip checks and its faster
