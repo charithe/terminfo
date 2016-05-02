@@ -129,7 +129,6 @@ func (ti *Terminfo) Parm(i int, p ...interface{}) string {
 // upon the supplied baud.  At high baud rates, more padding characters
 // will be inserted.  All Terminfo based strings should be emitted using
 // this function.
-// TODO undestand this
 func (ti *Terminfo) Puts(w io.Writer, s string, baud int) {
 	for {
 		start := strings.Index(s, "$<")
@@ -170,10 +169,9 @@ func (ti *Terminfo) Puts(w io.Writer, s string, baud int) {
 				break LOOP
 			}
 		}
-		cnt := int(((baud / 8) * padus) / unit)
-		for cnt > 0 {
+
+		for cnt := ((baud / 8) * padus) / unit; cnt > 0; cnt-- {
 			io.WriteString(w, ti.Strings[caps.PadChar])
-			cnt--
 		}
 	}
 }
