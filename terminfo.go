@@ -123,8 +123,14 @@ func (ti *Terminfo) Parm(i int, p ...interface{}) string {
 	return Parm(ti.Strings[i], p...)
 }
 
+// Puts emits the string to the writer, but expands inline padding
+// indications (of the form $<[delay]> where [delay] is msec) to
+// a suitable number of padding characters (usually null bytes) based
+// upon the supplied baud.  At high baud rates, more padding characters
+// will be inserted.  All Terminfo based strings should be emitted using
+// this function.
 // TODO undestand this
-func (ti *Terminfo) TPuts(w io.Writer, s string, baud int) {
+func (ti *Terminfo) Puts(w io.Writer, s string, baud int) {
 	for {
 		start := strings.Index(s, "$<")
 		if start == -1 {
@@ -170,4 +176,10 @@ func (ti *Terminfo) TPuts(w io.Writer, s string, baud int) {
 			cnt--
 		}
 	}
+}
+
+// Goto returns a string suitable for addressing the cursor at the given
+// row and column. The origin 0, 0 is in the upper left corner of the screen.
+func (ti *Terminfo) Goto(row, col int) string {
+	return ti.Parm(caps.CursorAddress, row, col)
 }
