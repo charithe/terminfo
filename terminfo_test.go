@@ -1,18 +1,19 @@
-package terminfo_test
+package terminfo
 
 import (
 	"bytes"
 	"testing"
 
-	"github.com/nhooyr/terminfo"
 	"github.com/nhooyr/terminfo/caps"
 )
 
+// TODO look at unibillium tests
 func TestOpen(t *testing.T) {
-	ti, err := terminfo.Load("xterm")
+	ti, err := LoadEnv()
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Logf("%q", ti.ExtStrings["kUP7"])
 	t.Logf("%q", ti.Strings[caps.FlashScreen])
 	b := bytes.NewBuffer(nil)
 	ti.Strings[caps.PadChar] = "*"
@@ -23,10 +24,10 @@ func TestOpen(t *testing.T) {
 var result interface{}
 
 func BenchmarkOpen(b *testing.B) {
-	var r *terminfo.Terminfo
+	var r *Terminfo
 	var err error
 	for i := 0; i < b.N; i++ {
-		r, err = terminfo.LoadEnv()
+		r, err = LoadEnv()
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -35,7 +36,7 @@ func BenchmarkOpen(b *testing.B) {
 }
 
 func BenchmarkTiParm(b *testing.B) {
-	ti, err := terminfo.LoadEnv()
+	ti, err := LoadEnv()
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -46,11 +47,10 @@ func BenchmarkTiParm(b *testing.B) {
 	result = r
 }
 
-// TODO somehow there are 6 allocations/op?
 func BenchmarkParm(b *testing.B) {
 	var r string
 	for i := 0; i < b.N; i++ {
-		r = terminfo.Parm("%p1%:-10o %p1%:+10x %p1% 5X %p1%:-3.3d", 254)
+		r = Parm("%p1%:-10o %p1%:+10x %p1% 5X %p1%:-3.3d", 254)
 	}
 	result = r
 }

@@ -89,8 +89,8 @@ func openDir(dir, name string) (*Terminfo, error) {
 	}
 	// Cache the Terminfo struct.
 	dbMutex.Lock()
-	for i := range r.ti.Names {
-		db[r.ti.Names[i]] = r.ti
+	for _, n := range r.ti.Names {
+		db[n] = r.ti
 	}
 	dbMutex.Unlock()
 	return r.ti, nil
@@ -148,7 +148,7 @@ func (ti *Terminfo) Puts(w io.Writer, s string, lines, baud int) {
 		val := s[:end]
 		s = s[end+1:]
 		var ms int
-		var dot, mandatory bool
+		var dot, mandatory, asterisk bool
 		unit := 1000
 		for _, ch := range val {
 			if ch >= '0' && ch <= '9' {
@@ -158,15 +158,16 @@ func (ti *Terminfo) Puts(w io.Writer, s string, lines, baud int) {
 				}
 			} else if ch == '.' && !dot {
 				dot = true
-			} else if ch == '*' {
-				unit /= lines
+			} else if ch == '*' && !asterisk {
+				ms *= lines
+				asterisk = true
 			} else if ch == '/' {
 				mandatory = true
 			} else {
 				break
 			}
 		}
-		n := ((baud / 8) * ms) / unit
+		n := ((baud / 8) / unit) * ms
 		pad := ti.Strings[caps.PadChar]
 		b := make([]byte, len(pad)*n)
 		for bp := copy(b, pad); bp < len(b); bp *= 2 {
