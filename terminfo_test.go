@@ -1,6 +1,7 @@
 package terminfo_test
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/nhooyr/terminfo"
@@ -12,7 +13,11 @@ func TestOpen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("%q", ti.ExtStrings["kUP7"])
+	t.Logf("%q", ti.Strings[caps.FlashScreen])
+	b := bytes.NewBuffer(nil)
+	ti.Strings[caps.PadChar] = "*"
+	ti.Puts(b, ti.Strings[caps.FlashScreen], 1, 9600)
+	t.Logf("%q", b.Bytes())
 }
 
 var result interface{}

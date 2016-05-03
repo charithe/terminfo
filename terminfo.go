@@ -129,7 +129,7 @@ func (ti *Terminfo) Parm(i int, p ...interface{}) string {
 // upon the supplied baud.  At high baud rates, more padding characters
 // will be inserted.  All Terminfo based strings should be emitted using
 // this function.
-func (ti *Terminfo) Puts(w io.Writer, s string, baud int) {
+func (ti *Terminfo) Puts(w io.Writer, s string, lines, baud int) {
 	for {
 		start := strings.Index(s, "$<")
 		if start == -1 {
@@ -147,31 +147,33 @@ func (ti *Terminfo) Puts(w io.Writer, s string, baud int) {
 		}
 		val := s[:end]
 		s = s[end+1:]
-		padus := 0
+		var ms int
+		var dot, mandatory bool
 		unit := 1000
-		dot := false
-	LOOP:
-		for i := range val {
-			switch val[i] {
-			case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-				padus *= 10
-				padus += int(val[i] - '0')
+		for _, ch := range val {
+			if ch >= '0' && ch <= '9' {
+				ms = (ms * 10) + int(ch-'0')
 				if dot {
 					unit *= 10
 				}
-			case '.':
-				if !dot {
-					dot = true
-				} else {
-					break LOOP
-				}
-			default:
-				break LOOP
+			} else if ch == '.' && !dot {
+				dot = true
+			} else if ch == '*' {
+				unit /= lines
+			} else if ch == '/' {
+				mandatory = true
+			} else {
+				break
 			}
 		}
-
-		for cnt := ((baud / 8) * padus) / unit; cnt > 0; cnt-- {
-			io.WriteString(w, ti.Strings[caps.PadChar])
+		n := ((baud / 8) * ms) / unit
+		pad := ti.Strings[caps.PadChar]
+		b := make([]byte, len(pad)*n)
+		for bp := copy(b, pad); bp < len(b); bp *= 2 {
+			copy(b[bp:], b[:bp])
+		}
+		if (!ti.Bools[caps.XonXoff] && baud > int(ti.Numbers[caps.PaddingBaudRate])) || mandatory {
+			w.Write(b)
 		}
 	}
 }
