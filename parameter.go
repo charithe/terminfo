@@ -239,16 +239,17 @@ func scanFormat(pz *parametizer) stateFn {
 	// The character was already read, so no need to check the error.
 	ch, _ := pz.get()
 	// 6 should be the maximum size of a format string, for example "%:-9.9d".
-	f := []byte{'%', ch}
+	f := make([]byte, 2, 6)
+	f[0], f[1] = '%', ch
 	var err error
 LOOP:
-	for i := 2; i < len(f); i++ {
+	for {
 		pz.pos++
 		ch, err = pz.get()
 		if err != nil {
 			return nil
 		}
-		f[i] = ch
+		f = append(f, ch)
 		switch ch {
 		case 'o', 'd', 'x', 'X':
 			fmt.Fprintf(pz.buf, string(f), pz.stk.popInt())
