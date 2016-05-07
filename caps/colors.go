@@ -1,6 +1,6 @@
 package caps
 
-// TODO put these in their own package
+// TODO put these in their own package when true color is implemented.
 const (
 	Black = iota
 	Red
