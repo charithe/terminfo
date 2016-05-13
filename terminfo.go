@@ -1,4 +1,4 @@
-// Package terminfo implements terminfo reading in pure go.
+// Package terminfo implements reading terminfo files in pure go.
 package terminfo
 
 import (
