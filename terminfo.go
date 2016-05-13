@@ -1,3 +1,4 @@
+// Package terminfo implements terminfo reading in pure go.
 package terminfo
 
 import (
@@ -118,7 +119,8 @@ func (ti *Terminfo) Color(fg, bg int) (rv string) {
 	return
 }
 
-// Parm is a thin wrapper around the function Parm.
+// Parm calls the function Parm with the string in ti.Strings at
+// i and the variadic arguments.
 func (ti *Terminfo) Parm(i int, p ...interface{}) string {
 	return Parm(ti.Strings[i], p...)
 }
@@ -127,8 +129,7 @@ func (ti *Terminfo) Parm(i int, p ...interface{}) string {
 // indications (of the form $<[delay]> where [delay] is msec) to
 // a suitable number of padding characters (usually null bytes) based
 // upon the supplied baud.  At high baud rates, more padding characters
-// will be inserted.  All Terminfo based strings should be emitted using
-// this function.
+// will be inserted.
 func (ti *Terminfo) Puts(w io.Writer, s string, lines, baud int) {
 	for {
 		start := strings.Index(s, "$<")
