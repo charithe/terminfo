@@ -19,6 +19,7 @@ func TestOpen(t *testing.T) {
 	ti.Strings[caps.PadChar] = "*"
 	ti.Puts(b, ti.Strings[caps.FlashScreen], 1, 9600)
 	t.Logf("%q", b.Bytes())
+	t.Logf("%q", ti.Color(1, 1))
 }
 
 var result interface{}
@@ -35,22 +36,14 @@ func BenchmarkOpen(b *testing.B) {
 	result = r
 }
 
-func BenchmarkTiParm(b *testing.B) {
+func BenchmarkParm(b *testing.B) {
 	ti, err := LoadEnv()
 	if err != nil {
 		b.Fatal(err)
 	}
 	var r string
 	for i := 0; i < b.N; i++ {
-		r = ti.Parm(caps.SetAForeground, 7, 5)
-	}
-	result = r
-}
-
-func BenchmarkParm(b *testing.B) {
-	var r string
-	for i := 0; i < b.N; i++ {
-		r = Parm("%p1%:-10o %p1%:+10x %p1% 5X %p1%:-3.3d", 254)
+		r = ti.Color(7, 5)
 	}
 	result = r
 }

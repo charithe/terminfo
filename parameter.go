@@ -22,7 +22,10 @@ type parametizer struct {
 }
 
 // static vars
-var svars [26]interface{}
+var (
+	svarsMutex sync.Mutex
+	svars      [26]interface{}
+)
 
 var parametizerPool = sync.Pool{
 	New: func() interface{} {
@@ -287,7 +290,9 @@ func setDSVar(pz *parametizer) stateFn {
 		return nil
 	}
 	if ch >= 'A' && ch <= 'Z' {
+		svarsMutex.Lock()
 		svars[int(ch-'A')] = pz.stk.pop()
+		svarsMutex.Unlock()
 	} else if ch >= 'a' && ch <= 'z' {
 		pz.dvars[int(ch-'a')] = pz.stk.pop()
 	}
@@ -300,11 +305,15 @@ func getDSVar(pz *parametizer) stateFn {
 	if err != nil {
 		return nil
 	}
+	var a byte
 	if ch >= 'A' && ch <= 'Z' {
-		pz.stk.push(svars[int(ch-'A')])
+		a = 'A'
 	} else if ch >= 'a' && ch <= 'z' {
-		pz.stk.push(svars[int(ch-'a')])
+		a = 'a'
 	}
+	svarsMutex.Lock()
+	pz.stk.push(svars[int(ch-a)])
+	svarsMutex.Unlock()
 	pz.pos++
 	return scanText
 }
@@ -391,6 +400,7 @@ func skipElse(pz *parametizer) stateFn {
 	return skipText
 }
 
+// TODO use a special structure
 type stack []interface{}
 
 func (stk *stack) push(v interface{}) {

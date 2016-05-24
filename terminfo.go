@@ -26,8 +26,8 @@ type Terminfo struct {
 
 // Terminfo cache.
 var (
+	dbMutex sync.RWMutex
 	db      = make(map[string]*Terminfo)
-	dbMutex = new(sync.RWMutex)
 )
 
 // LoadEnv calls Load with the name as $TERM.
@@ -99,9 +99,10 @@ func openDir(dir, name string) (*Terminfo, error) {
 
 // Color takes a foreground and background color and returns string
 // that sets them for this terminal.
+// TODO redo with styles integer
 func (ti *Terminfo) Color(fg, bg int) (rv string) {
 	maxColors := int(ti.Numbers[caps.MaxColors])
-	// Map bright colors to lower versions if color table only holds 8.
+	// Map bright colors to lower versions if the color table only holds 8.
 	if maxColors == 8 {
 		if fg > 7 && fg < 16 {
 			fg -= 8
