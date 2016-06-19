@@ -70,6 +70,12 @@ func Load(name string) (ti *Terminfo, err error) {
 			}
 		}
 	}
+	for _, dir := range []string{"/etc/terminfo", "/lib/terminfo"} {
+		ti, err = openDir(dir, name)
+		if err == nil {
+			return
+		}
+	}
 	return openDir("/usr/share/terminfo", name)
 }
 
